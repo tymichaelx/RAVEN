@@ -1,0 +1,62 @@
+{
+ "split_seed": 86,
+ "split_score": {
+  "labels_missing_from_dev_or_test": 1,
+  "l1_gap": 0.8188
+ },
+ "dropped": {
+  "empty": 11,
+  "overlong_unlabeled": 36
+ },
+ "cross_split_duplicates_removed": {
+  "dev": 57,
+  "test": 146
+ },
+ "merged_leakage_groups": 1,
+ "splits": {
+  "train": {
+   "docs": 107,
+   "sentences": 13436,
+   "labeled": 2871,
+   "label_instances": 3541
+  },
+  "dev": {
+   "docs": 22,
+   "sentences": 2503,
+   "labeled": 574,
+   "label_instances": 774
+  },
+  "test": {
+   "docs": 22,
+   "sentences": 2989,
+   "labeled": 621,
+   "label_instances": 824
+  }
+ },
+ "labels_total": 50,
+ "labels_in_scope": 40,
+ "min_train": 20,
+ "test_label_coverage": 0.9515,
+ "annoctr": {
+  "docs": 34,
+  "docs_with_in_scope_gold": 31,
+  "gold_coverage": 0.5723
+ },
+ "audit_docs": [
+  "analysis-on-recent-wiper-attacks-examples-and-how-wiper-malware-works",
+  "conti-team-one-splinter-group-resurfaces-as-royal-ransomware-with-callback-phish",
+  "defending-users-nas-devices-from-evolving-threats",
+  "do-not-cross-the-redline-stealer-detections-and-analysis",
+  "early-bird-catches-the-wormhole-observations-from-the-stellarparticle-campaign",
+  "how-to-detect-cobalt-strike",
+  "hungry-for-data-modpipe-backdoor-hits-pos-software-used-in-hospitality-sector",
+  "lapsus-recent-techniques-tactics-and-procedures",
+  "malware-reverse-engineering-for-beginners-part-2",
+  "mercury-and-dev1084-destructive-attack-on-hybrid-environment",
+  "pack-it-secretly-earth-pretas-updated-stealthy-strategies",
+  "ransom-cartel-ransomware-a-possible-connection-with-revil",
+  "seroxen-rat-for-sale",
+  "spike-in-lokibot-activity-during-final-week-of-2022",
+  "wtb-remote-mac-exploitation-via-custom-url-schemes"
+ ]
+}

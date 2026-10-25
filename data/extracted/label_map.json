@@ -1,0 +1,352 @@
+{
+ "T1003": {
+  "name": "OS Credential Dumping",
+  "train": 79,
+  "dev": 15,
+  "test": 18,
+  "in_scope": true
+ },
+ "T1005": {
+  "name": "Data from Local System",
+  "train": 47,
+  "dev": 8,
+  "test": 6,
+  "in_scope": true
+ },
+ "T1012": {
+  "name": "Query Registry",
+  "train": 13,
+  "dev": 5,
+  "test": 6,
+  "in_scope": false
+ },
+ "T1016": {
+  "name": "System Network Configuration Discovery",
+  "train": 30,
+  "dev": 12,
+  "test": 10,
+  "in_scope": true
+ },
+ "T1021": {
+  "name": "Remote Services",
+  "train": 59,
+  "dev": 8,
+  "test": 32,
+  "in_scope": true
+ },
+ "T1027": {
+  "name": "Obfuscated Files or Information",
+  "train": 475,
+  "dev": 84,
+  "test": 119,
+  "in_scope": true
+ },
+ "T1033": {
+  "name": "System Owner/User Discovery",
+  "train": 31,
+  "dev": 10,
+  "test": 6,
+  "in_scope": true
+ },
+ "T1036": {
+  "name": "Masquerading",
+  "train": 51,
+  "dev": 10,
+  "test": 10,
+  "in_scope": true
+ },
+ "T1041": {
+  "name": "Exfiltration Over C2 Channel",
+  "train": 57,
+  "dev": 15,
+  "test": 8,
+  "in_scope": true
+ },
+ "T1047": {
+  "name": "Windows Management Instrumentation",
+  "train": 34,
+  "dev": 29,
+  "test": 14,
+  "in_scope": true
+ },
+ "T1053": {
+  "name": "Scheduled Task/Job",
+  "train": 73,
+  "dev": 35,
+  "test": 10,
+  "in_scope": true
+ },
+ "T1055": {
+  "name": "Process Injection",
+  "train": 193,
+  "dev": 37,
+  "test": 48,
+  "in_scope": true
+ },
+ "T1056": {
+  "name": "Input Capture",
+  "train": 51,
+  "dev": 4,
+  "test": 7,
+  "in_scope": true
+ },
+ "T1057": {
+  "name": "Process Discovery",
+  "train": 52,
+  "dev": 7,
+  "test": 18,
+  "in_scope": true
+ },
+ "T1059": {
+  "name": "Command and Scripting Interpreter",
+  "train": 216,
+  "dev": 70,
+  "test": 68,
+  "in_scope": true
+ },
+ "T1068": {
+  "name": "Exploitation for Privilege Escalation",
+  "train": 5,
+  "dev": 3,
+  "test": 2,
+  "in_scope": false
+ },
+ "T1070": {
+  "name": "Indicator Removal",
+  "train": 66,
+  "dev": 11,
+  "test": 13,
+  "in_scope": true
+ },
+ "T1071": {
+  "name": "Application Layer Protocol",
+  "train": 117,
+  "dev": 9,
+  "test": 22,
+  "in_scope": true
+ },
+ "T1072": {
+  "name": "Software Deployment Tools",
+  "train": 5,
+  "dev": 3,
+  "test": 2,
+  "in_scope": false
+ },
+ "T1074": {
+  "name": "Data Staged",
+  "train": 23,
+  "dev": 2,
+  "test": 1,
+  "in_scope": true
+ },
+ "T1078": {
+  "name": "Valid Accounts",
+  "train": 83,
+  "dev": 22,
+  "test": 56,
+  "in_scope": true
+ },
+ "T1082": {
+  "name": "System Information Discovery",
+  "train": 83,
+  "dev": 19,
+  "test": 21,
+  "in_scope": true
+ },
+ "T1083": {
+  "name": "File and Directory Discovery",
+  "train": 69,
+  "dev": 4,
+  "test": 20,
+  "in_scope": true
+ },
+ "T1090": {
+  "name": "Proxy",
+  "train": 133,
+  "dev": 4,
+  "test": 12,
+  "in_scope": true
+ },
+ "T1095": {
+  "name": "Non-Application Layer Protocol",
+  "train": 46,
+  "dev": 3,
+  "test": 8,
+  "in_scope": true
+ },
+ "T1105": {
+  "name": "Ingress Tool Transfer",
+  "train": 176,
+  "dev": 60,
+  "test": 25,
+  "in_scope": true
+ },
+ "T1106": {
+  "name": "Native API",
+  "train": 167,
+  "dev": 19,
+  "test": 21,
+  "in_scope": true
+ },
+ "T1110": {
+  "name": "Brute Force",
+  "train": 37,
+  "dev": 6,
+  "test": 9,
+  "in_scope": true
+ },
+ "T1112": {
+  "name": "Modify Registry",
+  "train": 75,
+  "dev": 12,
+  "test": 20,
+  "in_scope": true
+ },
+ "T1113": {
+  "name": "Screen Capture",
+  "train": 33,
+  "dev": 7,
+  "test": 9,
+  "in_scope": true
+ },
+ "T1140": {
+  "name": "Deobfuscate/Decode Files or Information",
+  "train": 347,
+  "dev": 53,
+  "test": 66,
+  "in_scope": true
+ },
+ "T1190": {
+  "name": "Exploit Public-Facing Application",
+  "train": 49,
+  "dev": 6,
+  "test": 6,
+  "in_scope": true
+ },
+ "T1204": {
+  "name": "User Execution",
+  "train": 74,
+  "dev": 12,
+  "test": 10,
+  "in_scope": true
+ },
+ "T1210": {
+  "name": "Exploitation of Remote Services",
+  "train": 13,
+  "dev": 3,
+  "test": 1,
+  "in_scope": false
+ },
+ "T1218": {
+  "name": "System Binary Proxy Execution",
+  "train": 29,
+  "dev": 18,
+  "test": 13,
+  "in_scope": true
+ },
+ "T1219": {
+  "name": "Remote Access Software",
+  "train": 27,
+  "dev": 17,
+  "test": 12,
+  "in_scope": true
+ },
+ "T1484": {
+  "name": "Domain Policy Modification",
+  "train": 16,
+  "dev": 3,
+  "test": 5,
+  "in_scope": false
+ },
+ "T1518": {
+  "name": "Software Discovery",
+  "train": 20,
+  "dev": 13,
+  "test": 4,
+  "in_scope": true
+ },
+ "T1543": {
+  "name": "Create or Modify System Process",
+  "train": 33,
+  "dev": 12,
+  "test": 8,
+  "in_scope": true
+ },
+ "T1547": {
+  "name": "Boot or Logon Autostart Execution",
+  "train": 50,
+  "dev": 8,
+  "test": 7,
+  "in_scope": true
+ },
+ "T1548": {
+  "name": "Abuse Elevation Control Mechanism",
+  "train": 10,
+  "dev": 4,
+  "test": 12,
+  "in_scope": false
+ },
+ "T1552": {
+  "name": "Unsecured Credentials",
+  "train": 14,
+  "dev": 2,
+  "test": 6,
+  "in_scope": false
+ },
+ "T1557": {
+  "name": "Adversary-in-the-Middle",
+  "train": 7,
+  "dev": 0,
+  "test": 0,
+  "in_scope": false
+ },
+ "T1562": {
+  "name": "Impair Defenses",
+  "train": 65,
+  "dev": 14,
+  "test": 14,
+  "in_scope": true
+ },
+ "T1564": {
+  "name": "Hide Artifacts",
+  "train": 8,
+  "dev": 3,
+  "test": 5,
+  "in_scope": false
+ },
+ "T1566": {
+  "name": "Phishing",
+  "train": 68,
+  "dev": 11,
+  "test": 11,
+  "in_scope": true
+ },
+ "T1569": {
+  "name": "System Services",
+  "train": 15,
+  "dev": 6,
+  "test": 1,
+  "in_scope": false
+ },
+ "T1570": {
+  "name": "Lateral Tool Transfer",
+  "train": 44,
+  "dev": 8,
+  "test": 7,
+  "in_scope": true
+ },
+ "T1573": {
+  "name": "Encrypted Channel",
+  "train": 38,
+  "dev": 14,
+  "test": 8,
+  "in_scope": true
+ },
+ "T1574": {
+  "name": "Hijack Execution Flow",
+  "train": 35,
+  "dev": 34,
+  "test": 7,
+  "in_scope": true
+ }
+}
