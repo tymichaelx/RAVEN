@@ -5,6 +5,14 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from collections import Counter
 from itertools import combinations
+import string
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from nltk import FreqDist
+from wordcloud import WordCloud
+from nltk import ConditionalFreqDist
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 OUT = Path("eda_results")
 OUT.mkdir(exist_ok = True)
@@ -162,3 +170,92 @@ holdout_pool[cols].sort_values("test", ascending=False).to_csv(OUT / "holdout_po
 holdout_pool[holdout_pool["eligible"]][cols].to_markdown(OUT / "holdout_eligible.md", index=False)
 
 print(f"{holdout_pool['eligible'].sum()} of {holdout_pool['in_scope'].sum()} in-scope techniques are eligible")
+
+# --- Normalization for analysis only ---
+nltk.download("punkt_tab")
+nltk.download("stopwords")
+
+train_text = [r["text"] for r in splits["train"]]
+labeled_text = [r["text"] for r in splits["train"] if r["labels"]]
+
+STOP = set(stopwords.words("english"))
+PUNCT = set(string.punctuation) | {"``", "''", "’", "“", "”", "--", "..."}
+
+def raw_tokens(texts):
+    return [t.lower() for s in texts for t in word_tokenize(s)]
+
+def clean_tokens(texts):
+    return [t for t in raw_tokens(texts)
+            if t not in STOP and t not in PUNCT and not all(c in string.punctuation for c in t)]
+
+
+fd_raw = FreqDist(raw_tokens(train_text))
+fd_clean = FreqDist(clean_tokens(train_text))
+
+def plot_top(fd, title, filename, n=20):
+    words, counts = zip(*fd.most_common(n))
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.bar(words, counts)
+    ax.set_title(title)
+    ax.set_ylabel("Count")
+    ax.tick_params(axis="x", rotation=60)
+    plt.tight_layout()
+    fig.savefig(OUT / filename, dpi=200, bbox_inches="tight")
+    plt.show()
+
+plot_top(fd_raw, "Top 20 tokens, raw (train)", "freq_top20_raw.png")
+plot_top(fd_clean, "Top 20 tokens, stopwords and punctuation removed (train)", "freq_top20_clean.png")
+
+pd.DataFrame({
+    "raw_token": [w for w, _ in fd_raw.most_common(20)],
+    "raw_count": [c for _, c in fd_raw.most_common(20)],
+    "clean_token": [w for w, _ in fd_clean.most_common(20)],
+    "clean_count": [c for _, c in fd_clean.most_common(20)],
+}).to_markdown(OUT / "freq_top20.md", index=False)
+
+# --- Word clouds
+def save_cloud(fd, title, filename):
+    wc = WordCloud(width=1200, height=600, background_color="white", max_words=150)
+    wc.generate_from_frequencies(dict(fd))
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.imshow(wc, interpolation="bilinear")
+    ax.axis("off")
+    ax.set_title(title)
+    fig.savefig(OUT / filename, dpi=200, bbox_inches="tight")
+    plt.show()
+
+save_cloud(fd_clean, "All training sentences", "wordcloud_all.png")
+save_cloud(FreqDist(clean_tokens(labeled_text)), "Labeled training sentences only", "wordcloud_labeled.png")
+
+
+cfd = ConditionalFreqDist(
+    (tech, tok)
+    for r in splits["train"] if r["labels"]
+    for tok in clean_tokens([r["text"]])
+    for tech in r["labels"]
+)
+
+for tech in ("T1003", "T1055"):
+    print(tech, label_map[tech]["name"])
+    print("  ", cfd[tech].most_common(10))
+
+
+techs = sorted(in_scope)
+docs = [" ".join(cfd[t].elements()) for t in techs]
+
+vec = TfidfVectorizer(token_pattern = r"\S+", sublinear_tf = True)
+X = vec.fit_transform(docs)
+vocab = np.array(vec.get_feature_names_out())
+
+rows = []
+for i, t in enumerate(techs):
+    weights = X[i].toarray().ravel()
+    top = weights.argsort()[::-1][:10]
+    rows.append({"technique": t, "name": label_map[t]["name"],
+                 "top_raw": ", ".join(w for w, _ in cfd[t].most_common(10)),
+                 "top_distinctive": ", ".join(vocab[top])})
+
+cond_freq = pd.DataFrame(rows)
+cond_freq.to_csv(OUT / "conditional_frequency.csv", index = False)
+cond_freq.to_markdown(OUT / "conditional_frequency.md", index = False)
+cond_freq[cond_freq["technique"].isin(["T1003", "T1055"])]
