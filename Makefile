@@ -4,3 +4,6 @@ PYTHON ?= .venv/bin/python
 
 techniques:
 	$(PYTHON) src/techniques.py --stix data/raw/tram/data/attack/enterprise-attack.json
+
+eda:
+	$(PYTHON) src/eda.py
