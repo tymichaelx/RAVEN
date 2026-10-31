@@ -60,7 +60,7 @@ def build(stix_path):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--stix", type=Path, default=Path("raw/tram/enterprise-attack.json"))
+    ap.add_argument("--stix", type=Path, default=Path("data/raw/tram/attack/enterprise-attack.json"))
     ap.add_argument("--labels", type=Path, default=Path("data/label_map.json"),
                     help="label_map.json from build_dataset.py, used to check coverage")
     ap.add_argument("--out", type=Path, default=Path("data/techniques.json"))
