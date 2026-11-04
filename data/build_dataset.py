@@ -22,8 +22,7 @@ URL_HEADER = re.compile(r"^.{0,300}?\burl:\s*https?://\S+\s*", re.I | re.S)
 TITLE_TAG = re.compile(r"^\s*title:\s*", re.I)
 MD_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 TECH_ID = re.compile(r"(T\d{4})")
-TECH_ID_TEXT = re.compile(r"\bT1\d{3}(?:\.\d{3})?\b")
-
+TECH_ID_TEXT = re.compile(r"\bT(?:A\d{4}|1\d{3}(?:\.\d{3})?)", re.IGNORECASE)
 
 def clean(text):
     """Strip TRAM's title/url header and markdown link targets; collapse whitespace."""
