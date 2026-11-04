@@ -1,6 +1,6 @@
 PYTHON ?= .venv/bin/python
 
-.PHONY: techniques fetch dataset
+.PHONY: techniques fetch dataset eda holdout
 
 # fetch_data.sh clones into ./raw relative to its working directory
 fetch:
@@ -14,3 +14,6 @@ techniques:
 
 eda:
 	$(PYTHON) src/eda.py
+
+holdout:
+	$(PYTHON) src/holdout.py
