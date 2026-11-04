@@ -9,8 +9,8 @@
   "overlong_unlabeled": 36
  },
  "cross_split_duplicates_removed": {
-  "dev": 57,
-  "test": 146
+  "dev": 67,
+  "test": 162
  },
  "merged_leakage_groups": 1,
  "splits": {
@@ -22,13 +22,13 @@
   },
   "dev": {
    "docs": 22,
-   "sentences": 2503,
+   "sentences": 2493,
    "labeled": 574,
    "label_instances": 774
   },
   "test": {
    "docs": 22,
-   "sentences": 2989,
+   "sentences": 2973,
    "labeled": 621,
    "label_instances": 824
   }
