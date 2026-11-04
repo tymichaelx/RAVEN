@@ -5,3 +5,4 @@ numpy
 nltk
 wordcloud
 scikit-learn
+transformers
