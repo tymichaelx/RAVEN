@@ -19,7 +19,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 OUT = Path("eda_results")
 OUT.mkdir(exist_ok = True)
 
-# --- Load data
+# ----- Load data -----
 label_map = json.load(open("data/extracted/label_map.json"))
 
 
@@ -32,7 +32,7 @@ split_list = ["train", "dev", "test"]
 splits = {name: load_jsonl(f"data/extracted/{name}.jsonl") for name in
           split_list}
 
-# --- Frequency per technique ---
+# ----- Frequency per technique -----
 freq = pd.DataFrame.from_dict(label_map, orient = "index")
 freq["total"] = freq[["train", "test", "dev"]].sum(axis = 1)
 table = (freq.reset_index()
@@ -56,7 +56,7 @@ plt.tight_layout()
 
 fig.savefig(OUT / "technique_frequency.png", dpi = 200, bbox_inches = "tight")
 
-# --- Labeled Sentences ---
+# ----- Labeled Sentences -----
 # Labeled sentences are in-scope techniques and Unlabeled are out of scope
 # Our evaluation only scores the 40 in-scope techniques, so a sentence labeled
 # only with an out-of-scope technique behaves like an unlabeled sentence during
@@ -99,7 +99,7 @@ for name, data in splits.items():
           f"({100 * in_scope_labeled / len(data):.1f}%)")
 
 
-# --- Labels per sentence ---
+# ----- Labels per sentence -----
 def bucket(n):
     return "3+" if n >= 3 else str(n)
 
@@ -131,7 +131,7 @@ plt.tight_layout()
 ax.figure.savefig(OUT / "labels_per_sentence.png", dpi = 200,
                   bbox_inches = "tight")
 
-# --- Technique Co-occurrence ---
+# ----- Technique Co-occurrence -----
 
 train = splits["train"]
 
@@ -179,7 +179,7 @@ holdout_pool = table.copy()
 holdout_pool["tactics"] = holdout_pool["technique"].map(
     lambda t: ", ".join(techniques[t]["tactics"]))
 holdout_pool["eligible"] = holdout_pool["in_scope"] & (
-            holdout_pool["test"] >= 5)
+        holdout_pool["test"] >= 5)
 
 cols = ["technique", "name", "tactics", "train", "dev", "test", "eligible"]
 holdout_pool[cols].sort_values("test", ascending = False).to_csv(
@@ -190,7 +190,7 @@ holdout_pool[holdout_pool["eligible"]][cols].to_markdown(
 print(
     f"{holdout_pool['eligible'].sum()} of {holdout_pool['in_scope'].sum()} in-scope techniques are eligible")
 
-# --- Normalization for analysis only ---
+# ----- Normalization for analysis only -----
 nltk.download("punkt_tab")
 nltk.download("stopwords")
 
@@ -239,7 +239,7 @@ pd.DataFrame({
 }).to_markdown(OUT / "freq_top20.md", index = False)
 
 
-# --- Word clouds
+# ----- Word clouds -----
 def save_cloud(fd, title, filename):
     wc = WordCloud(width = 1200, height = 600, background_color = "white",
                    max_words = 150)
@@ -274,18 +274,25 @@ vec = TfidfVectorizer(token_pattern = r"\S+", sublinear_tf = True)
 X = vec.fit_transform(docs)
 vocab = np.array(vec.get_feature_names_out())
 
+df_count = (X > 0).sum(axis = 0).A1
+word_col = {w: i for i, w in enumerate(vocab)}
+
 rows = []
 for i, t in enumerate(techs):
     weights = X[i].toarray().ravel()
+    raw = cfd[t].most_common(10)
     top = weights.argsort()[::-1][:10]
-    rows.append({"technique": t, "name": label_map[t]["name"],
-                 "top_raw": ", ".join(w for w, _ in cfd[t].most_common(10)),
-                 "top_distinctive": ", ".join(vocab[top])})
+    rows.append({"technique": t,
+                 "name": label_map[t]["name"],
+                 "top raw": ", ".join(w for w, _ in cfd[t].most_common(10)),
+                 "top by frequency": ", ".join(f"{w} ({c})" for w, c in raw),
+                 "top by TFIDF (count, weight, df=N)": ", ".join(
+                     f"{vocab[j]} ({cfd[t][vocab[j]]}, {weights[j]:.2f}, df={df_count[j]})"
+                     for j in top)})
 
 cond_freq = pd.DataFrame(rows)
 cond_freq.to_csv(OUT / "conditional_frequency.csv", index = False)
 cond_freq.to_markdown(OUT / "conditional_frequency.md", index = False)
-cond_freq[cond_freq["technique"].isin(["T1003", "T1055"])]
 
 nltk.download("wordnet", quiet = True)
 

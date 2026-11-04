@@ -9,7 +9,7 @@
   "overlong_unlabeled": 36
  },
  "cross_split_duplicates_removed": {
-  "dev": 67,
+  "dev": 69,
   "test": 162
  },
  "merged_leakage_groups": 1,
@@ -22,7 +22,7 @@
   },
   "dev": {
    "docs": 22,
-   "sentences": 2493,
+   "sentences": 2491,
    "labeled": 574,
    "label_instances": 774
   },
