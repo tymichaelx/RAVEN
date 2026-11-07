@@ -3,11 +3,27 @@
 Builds leakage-safe train/dev/test splits for sentence-level multi-label ATT&CK technique
 classification from TRAM v2, plus a document-level transfer set from AnnoCTR.
 
+## Setup
+
+Dependencies are managed with [uv](https://docs.astral.sh/uv/). `uv.lock` pins every
+package version and `.python-version` pins Python, so everyone gets the same environment.
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh   # once per machine
+uv sync                                           # creates .venv/ from uv.lock
+```
+
+Add a dependency with `uv add <package>`, never by hand, and commit the updated
+`pyproject.toml` and `uv.lock` together. Run scripts with `uv run python ...`, or select
+`.venv/bin/python` as the interpreter in your editor.
+
 ## Run
 
 ```bash
-bash fetch_data.sh          # clones both corpora at pinned commits into raw/
-python build_dataset.py     # writes data/ ; ~5 seconds
+make dataset      # clones both corpora at pinned commits, then writes data/extracted/ ; ~5 seconds
+make techniques   # data/techniques.json
+make eda          # eda_results/
+make holdout      # data/holdout.json
 ```
 
 Track A (TRAM-Clean released): list its report `doc_id`s one per line, then
