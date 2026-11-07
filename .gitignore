@@ -10,3 +10,5 @@
 /data/extracted/annoctr_test.jsonl
 /data/extracted/audit_sheet.csv
 /data/extracted/split_manifest.json
+
+.DS_Store
