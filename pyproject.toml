@@ -14,3 +14,11 @@ dependencies = [
     "transformers>=5.22.1",
     "wordcloud>=1.9.6",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

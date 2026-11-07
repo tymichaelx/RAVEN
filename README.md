@@ -26,6 +26,50 @@ make eda          # eda_results/
 make holdout      # data/holdout.json
 ```
 
+## Evaluation
+
+Every model is scored by `evaluation/evaluate.py`, so all conditions are compared with the
+same code. A model writes one JSON line per sentence of the split (use `write_predictions`):
+
+```json
+{"doc_id": "...", "sent_idx": 3, "predicted": ["T1059"], "scores": {"T1059": 0.91, "T1027": 0.40}}
+```
+
+`predicted` is the final answer (may be empty). `scores` is optional and enables the ranking
+metrics. Every sentence of the split must be present.
+
+```bash
+make evaluate PRED=runs/retriever/test.jsonl              # full run; SPLIT=dev to score dev
+make evaluate PRED=runs/retriever_withheld/test.jsonl WITHHELD=1   # withheld run
+make random-baseline                                      # chance-level floor for hypothesis 3
+make test                                                 # checks the scoring math
+```
+
+It compares the model's guesses with the correct labels and reports:
+
+| Metric | What it tells you |
+|---|---|
+| Precision | Of the techniques the model guessed, how many were right. Low = many false alarms. |
+| Recall | Of the techniques that were really there, how many the model found. Low = many misses. |
+| F1 | One number balancing precision and recall. High only when both are high. |
+| Micro F1 | F1 over all guesses pooled together. Dominated by the frequent techniques. |
+| Macro F1 | F1 per technique, then averaged. Every technique counts equally, so rare ones matter. |
+| Recall@k | How often the right technique is in the model's top k guesses (k = 1, 3, 5, 10). Shows whether the model ranks well, before any cut-off is applied. |
+| Average precision | One number for how well the model ranks right answers above wrong ones, across all cut-offs. 1.0 = perfect ranking. |
+
+Precision, recall and F1 are reported per sentence (the main result) and per report (all of
+a report's sentences combined; secondary). Recall@k and average precision need the optional
+`scores` field.
+
+Which technique groups are reported depends on how the model was trained:
+
+| Run | Trained on | Groups reported | Used for |
+|---|---|---|---|
+| Full (default) | all 40 | all 40; the 10 holdout techniques | H1, H2 |
+| Withheld (`WITHHELD=1`) | 30, without the holdout 10 | all 40; the 30 seen; the 10 withheld | H3 |
+
+H3 compares the same 10 techniques across the two runs: trained on versus never seen.
+
 Track A (TRAM-Clean released): list its report `doc_id`s one per line, then
 `python build_dataset.py --holdout-docs tram_clean_ids.txt` to force them into test.
 
