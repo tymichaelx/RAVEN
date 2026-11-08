@@ -1,7 +1,7 @@
 # `uv run` installs anything missing from uv.lock before running.
 PYTHON ?= uv run python
 
-.PHONY: setup techniques fetch dataset eda holdout test evaluate random-baseline train-retriever predict-retriever retriever smoke
+.PHONY: setup techniques fetch dataset eda holdout test evaluate random-baseline train-retriever predict-retriever retriever mine train-verifier predict-verifier verifier smoke
 
 setup:
 	uv sync
@@ -52,6 +52,26 @@ predict-retriever:
 
 retriever: train-retriever predict-retriever
 
-# Whole chain on a few hundred sentences, 1 epoch: catches bugs in minutes. Writes to runs/full/retriever/seed99/.
+VERIFIER_DIR = runs/$(RUN)/verifier/seed$(SEED)
+
+# Verifier training pairs from the retriever's mistakes on train (needs predict-retriever first).
+mine:
+	$(PYTHON) -m src.mine_negatives --run $(RUN) --seed $(SEED) $(MINE_ARGS)
+
+train-verifier:
+	$(PYTHON) -m src.verifier train --run $(RUN) --seed $(SEED) $(ARGS)
+
+# Two-stage pipeline: retriever top-k -> verifier. Tunes k and theta_v on dev, scores dev and test.
+predict-verifier:
+	$(PYTHON) -m src.verifier predict --run $(RUN) --seed $(SEED)
+	$(PYTHON) -m evaluation.evaluate --pred $(VERIFIER_DIR)/dev.jsonl --split dev $(WITHHELD_FLAG) --out $(VERIFIER_DIR)/metrics_dev.json > /dev/null
+	$(PYTHON) -m evaluation.evaluate --pred $(VERIFIER_DIR)/test.jsonl --split test $(WITHHELD_FLAG) --out $(VERIFIER_DIR)/metrics_test.json
+
+verifier: mine train-verifier predict-verifier
+
+# Whole chain on a few hundred sentences, 1 epoch: catches bugs in minutes. Writes to runs/full/*/seed99/.
 smoke:
 	$(MAKE) retriever RUN=full SEED=99 ARGS="--limit 400 --epochs 1"
+	$(MAKE) mine RUN=full SEED=99 MINE_ARGS="--limit 400"
+	$(MAKE) train-verifier RUN=full SEED=99 ARGS="--limit 300 --dev-limit 300 --epochs 1 --log-every 0"
+	$(PYTHON) -m src.verifier predict --run full --seed 99 --limit 300

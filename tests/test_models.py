@@ -64,3 +64,45 @@ def test_top_k_and_tuning():
     assert top_k_mask(S, 1).tolist() == [[True, False, False], [False, True, False]]
     best = tune_thresholds(S, G, ks=(1, 2))
     assert best["micro_f1"] == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------- mining and verifier
+
+from src.mine_negatives import mine
+from src.verifier import pipeline_matrix
+
+ROWS = {("d", 1): {"labels": ["A"]}, ("d", 2): {"labels": []}}
+CANDS = {("d", 1): [("A", 0.9), ("B", 0.95), ("C", 0.2)], ("d", 2): [("B", 0.5), ("C", 0.4), ("A", 0.1)]}
+
+
+def test_mining_guard_and_sources():
+    pairs, skipped, summary = mine(ROWS, CANDS, neg_k=10, unlabeled_k=2, unlabeled_frac=1.0, guard_quantile=0.5, seed=0)
+    # Guard = the only gold score, 0.9. B (0.95) on the labeled sentence is skipped as a possible missed label.
+    assert [(p["technique"], p["label"], p["source"]) for p in pairs] == [
+        ("A", 1, "gold"), ("C", 0, "labeled_neg"), ("B", 0, "unlabeled_neg"), ("C", 0, "unlabeled_neg")]
+    assert [p["technique"] for p in skipped] == ["B"]
+    assert summary["guard"] == pytest.approx(0.9)
+
+
+def test_pipeline_keeps_only_top_k_candidates():
+    rows = [{"doc_id": "d", "sent_idx": 1, "labels": ["A"]}]
+    verified = {("d", 1): [("B", 0.2), ("A", 0.9), ("C", 0.8)]}
+    S, G = pipeline_matrix(rows, verified, ["A", "B", "C"], k=2)
+    assert S[0].tolist() == [0.9, 0.2, -np.inf] and G[0].tolist() == [True, False, False]
+
+
+def test_verifier_input_keeps_technique_text_whole():
+    transformers = pytest.importorskip("transformers")
+    try:
+        tokenizer = transformers.AutoTokenizer.from_pretrained("ehsanaghaei/SecureBERT", local_files_only=True)
+    except OSError:
+        pytest.skip("SecureBERT tokenizer not downloaded")
+    from src.common import in_scope_ids, technique_texts
+    from src.verifier import PairBuilder
+    builder = PairBuilder(tokenizer, in_scope_ids())
+    long_sentence = "word " * 400
+    for t, text in technique_texts(in_scope_ids()).items():
+        full = tokenizer(text, add_special_tokens=False)["input_ids"]
+        assert builder.tech[t] == full, f"{t} description was cut"
+        ids = builder.ids(long_sentence, t)
+        assert len(ids) <= 512 and ids[-len(full) - 1:-1] == full
