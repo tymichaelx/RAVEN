@@ -12,3 +12,8 @@
 /data/extracted/split_manifest.json
 
 .DS_Store
+
+# Python caches
+__pycache__/
+.pytest_cache/
+
