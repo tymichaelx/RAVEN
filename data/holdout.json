@@ -1,0 +1,184 @@
+{
+  "purpose": "Ten techniques withheld from training so the model can be tested on methods it never saw. Drawn from techniques with enough examples, not from the rare techniques marked in_scope false.",
+  "ids": [
+    "T1113",
+    "T1090",
+    "T1003",
+    "T1574",
+    "T1057",
+    "T1106",
+    "T1041",
+    "T1566",
+    "T1570",
+    "T1543"
+  ],
+  "pool": {
+    "eligible": 38,
+    "min_test_sentences": 5,
+    "band_sizes": {
+      "low": 13,
+      "mid": 13,
+      "high": 12
+    }
+  },
+  "techniques": [
+    {
+      "id": "T1113",
+      "name": "Screen Capture",
+      "tactics": [
+        "collection"
+      ],
+      "train": 33,
+      "dev": 7,
+      "test": 9,
+      "band": "low",
+      "picked_for": "collection"
+    },
+    {
+      "id": "T1090",
+      "name": "Proxy",
+      "tactics": [
+        "command-and-control"
+      ],
+      "train": 133,
+      "dev": 4,
+      "test": 12,
+      "band": "high",
+      "picked_for": "command-and-control"
+    },
+    {
+      "id": "T1003",
+      "name": "OS Credential Dumping",
+      "tactics": [
+        "credential-access"
+      ],
+      "train": 79,
+      "dev": 15,
+      "test": 18,
+      "band": "high",
+      "picked_for": "credential-access"
+    },
+    {
+      "id": "T1574",
+      "name": "Hijack Execution Flow",
+      "tactics": [
+        "defense-evasion",
+        "persistence",
+        "privilege-escalation"
+      ],
+      "train": 35,
+      "dev": 34,
+      "test": 7,
+      "band": "low",
+      "picked_for": "defense-evasion"
+    },
+    {
+      "id": "T1057",
+      "name": "Process Discovery",
+      "tactics": [
+        "discovery"
+      ],
+      "train": 52,
+      "dev": 7,
+      "test": 18,
+      "band": "mid",
+      "picked_for": "discovery"
+    },
+    {
+      "id": "T1106",
+      "name": "Native API",
+      "tactics": [
+        "execution"
+      ],
+      "train": 167,
+      "dev": 19,
+      "test": 21,
+      "band": "high",
+      "picked_for": "execution"
+    },
+    {
+      "id": "T1041",
+      "name": "Exfiltration Over C2 Channel",
+      "tactics": [
+        "exfiltration"
+      ],
+      "train": 57,
+      "dev": 15,
+      "test": 8,
+      "band": "mid",
+      "picked_for": "exfiltration"
+    },
+    {
+      "id": "T1566",
+      "name": "Phishing",
+      "tactics": [
+        "initial-access"
+      ],
+      "train": 68,
+      "dev": 11,
+      "test": 11,
+      "band": "mid",
+      "picked_for": "initial-access"
+    },
+    {
+      "id": "T1570",
+      "name": "Lateral Tool Transfer",
+      "tactics": [
+        "lateral-movement"
+      ],
+      "train": 44,
+      "dev": 8,
+      "test": 7,
+      "band": "low",
+      "picked_for": "lateral-movement"
+    },
+    {
+      "id": "T1543",
+      "name": "Create or Modify System Process",
+      "tactics": [
+        "persistence",
+        "privilege-escalation"
+      ],
+      "train": 33,
+      "dev": 12,
+      "test": 8,
+      "band": "low",
+      "picked_for": "persistence"
+    }
+  ],
+  "tactics_covered": [
+    "collection",
+    "command-and-control",
+    "credential-access",
+    "defense-evasion",
+    "discovery",
+    "execution",
+    "exfiltration",
+    "initial-access",
+    "lateral-movement",
+    "persistence",
+    "privilege-escalation"
+  ],
+  "train_and_dev": "Drop a sentence when every label on it is withheld. If it also has a label that is kept, remove only the withheld label. Leave test sentences unchanged. Keep the withheld descriptions out of the candidate pool until test time.",
+  "effects": {
+    "train": {
+      "sentences": 13436,
+      "dropped": 492,
+      "sentences_with_a_hidden_label_removed": 189,
+      "hidden_labels_removed": 202,
+      "kept": 12944
+    },
+    "dev": {
+      "sentences": 2491,
+      "dropped": 78,
+      "sentences_with_a_hidden_label_removed": 45,
+      "hidden_labels_removed": 53,
+      "kept": 2413
+    },
+    "test": {
+      "sentences": 2973,
+      "sentences_with_a_hidden_label": 113,
+      "hidden_label_count": 119
+    }
+  }
+}
