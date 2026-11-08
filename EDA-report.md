@@ -10,7 +10,7 @@
 
 The distribution shows that 79% of the sentences in the dataset are unlabeled. This is consistent across splits where the in-scope labeled sentences are about 20.8, 22.4, and 20.0% for train, dev, and test, respectively. 
 
-![[Pasted image 20261104113839.png]]
+![Labeled vs unlabeled sentences per split](eda_results/label_presence.png)
 Figure 1: Labeled vs unlabeled sentence distributions for each dataset
 
 Because the retriever ranks techniques for every sentence, predicting its top candidates for all sentences would make most predictions false positives, capping precision near 21% even with a perfect ranking. Accuracy is uninformative, since predicting nothing would be correct 79% of the time, so we evaluate with precision, recall, and F1-score. Both stages use thresholds that allow a sentence to receive no prediction. The verifier is trained on negative candidates that include top-ranked techniques for unlabeled sentences, so it learns to reject them. We expect it to raise precision by more than it lowers recall by learning to reject incorrect sentence–technique candidate pairings. These pairs that are rejected are hopefully the false positives that the retrieval model has selected leading to increased precision and f1-score. 
@@ -21,7 +21,7 @@ Technique frequency is highly uneven. The five most frequent techniques, led by 
 
 We restrict evaluation to the 40 techniques with at least 20 training sentences, since techniques with fewer examples cannot be learned or evaluated reliably. The 10 excluded techniques have between 5 and 16 training sentences each. The 40 in-scope techniques account for 95.2% of test labels, so the restriction removes little of the evaluation data.
 
-![[technique_frequency.png]]  
+![Training sentences per technique](eda_results/technique_frequency.png)  
 Figure 2: Training sentences per technique. Blue bars are in scope; gray bars fall below the 20-sentence cutoff (dashed line).
 
 Because a few techniques dominate the labels, micro-averaged F1, which pools all predictions, would mostly reflect performance on those frequent techniques. We therefore also report macro-averaged F1, which averages the F1 score of each technique equally.
@@ -58,7 +58,7 @@ For each labeled sentence, we computed its Jaccard similarity with all 40 in-sco
 |Labeled technique among the five highest scores|48.0%|
 |Median rank of the labeled technique|6|
 
-![[lexical_overlap.png]]  
+![Word overlap between sentences and technique descriptions](eda_results/lexical_overlap.png)  
 Figure 3: Left, Jaccard similarity between each sentence and its labeled technique’s description. Right, the rank of the labeled technique among the 40 in-scope techniques when ranked by Jaccard similarity.
 
 Selecting the technique with the most word overlap would choose the labeled technique in fewer than one in five cases. The gap varies by technique. For T1105 (Ingress Tool Transfer), the labeled technique has the highest score in only 4.0% of 176 pairs, and for T1547 (Boot or Logon Autostart Execution) in 6.0% of 50, consistent with TTPrint’s observation that reports describe Run-key persistence in words that barely overlap with T1547’s definition. At the other end, T1204 (User Execution) reaches 56.8%. Reports and ATT&CK descriptions mostly express the same behavior in different words, which is why the retriever is trained to match sentences to descriptions rather than relying on shared vocabulary.
@@ -68,7 +68,7 @@ Selecting the technique with the most word overlap would choose the labeled tech
 
 The most frequent pair is T1027 (Obfuscated Files or Information) and T1140 (Deobfuscate/Decode Files or Information), labeled together on 72 training sentences. A single sentence often describes both halves of one sequence, an obfuscated payload that the malware decodes at runtime, so the two are likely to be confused and are a focus for error analysis. 
 
-![[Pasted image 20261104114332.png]]
+![Technique co-occurrence in training sentences](eda_results/cooccurrence_heatmap.png)
 Figure 4: Correlation matrix of Technique's by sentence level co-occurrence (train dataset)
 ## Distinctive Vocabulary Exists
 
@@ -88,14 +88,14 @@ The distinctive-word lists mix genuine technique vocabulary (`mimikatz`, `hollow
 
 Both encoders (MiniLM and SecureBERT) accept at most 512 tokens, and longer inputs raise an error, so all inputs are truncated. Several sentences exceed this limit, the longest reaching 1,126 tokens under MiniLM. Within that limit, we truncate sentences at 128 tokens, which keeps 97.3% of sentences intact under MiniLM and 97.8% under SecureBERT while reducing training time and memory relative to longer inputs. The truncated sentences are mostly long non-prose blocks such as indicator lists, so truncating them loses little information. Technique texts reach at most 155 tokens and are never truncated at the 256-token cutoff.
 
-![[Pasted image 20261104142554.png]]
+![Token lengths of technique texts](eda_results/token_lengths_techniques.png)
 Figure 5: Technique Cutoffs by token length
 
 ### Verifier Input Length
 
 The verifier reads each sentence and technique description together as a single input, so their combined length must fit within the encoder’s 512-token limit. Across all training sentence–label pairs, the combined length has a median of [median] tokens, and [pct_within_cutoff]% of pairs fit within 512; when a pair exceeds the limit, the sentence is truncated and the description is kept whole.
 
-![[Pasted image 20261104142745.png]]
+![Token lengths of sentences](eda_results/token_sentences.png)
 Figure 6: Counts of sentence lengths by token
 
 The table shows the number of sentence truncated. There are some outliers as the distribution of sentence lengths is largely right tailed and makes up less than 3 percent of the overall distribution. 

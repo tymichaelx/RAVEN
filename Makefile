@@ -1,6 +1,10 @@
-PYTHON ?= .venv/bin/python
+# `uv run` installs anything missing from uv.lock before running.
+PYTHON ?= uv run python
 
-.PHONY: techniques fetch dataset eda holdout
+.PHONY: setup techniques fetch dataset eda holdout
+
+setup:
+	uv sync
 
 # fetch_data.sh clones into ./raw relative to its working directory
 fetch:
