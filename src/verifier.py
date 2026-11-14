@@ -13,6 +13,7 @@ keep a candidate when p(s, t) >= theta_v. k and theta_v are tuned on dev only.
 Usage:
   python -m src.verifier train   --run full --seed 0
   python -m src.verifier predict --run full --seed 0
+Add --smoke for a quick check that the code runs (writes to runs/smoke/verifier/).
 Uses runs/<run>/retriever/seed<N>/candidates_*.jsonl and runs/<run>/verifier/seed<N>/pairs_train.jsonl.
 
 Outputs in runs/<run>/verifier/seed<N>/:
@@ -30,7 +31,7 @@ from torch import nn
 from transformers import AutoModel, AutoTokenizer, get_linear_schedule_with_warmup
 
 from evaluation.evaluate import write_predictions
-from src.common import (load_jsonl, load_split, pick_device, run_dir, save_json, set_seed, technique_pool,
+from src.common import (add_smoke_option, load_jsonl, load_split, model_dir, pick_device, save_json, set_seed, technique_pool,
                         technique_texts, tune_thresholds)
 
 BASE = "ehsanaghaei/SecureBERT"
@@ -94,9 +95,9 @@ def score_pairs(model, builder, pairs, device, batch_size=128):
     return probs
 
 
-def load_candidates(run, seed, split):
+def load_candidates(retriever_dir, split):
     """{(doc_id, sent_idx): [(technique, retriever score), ...]} in retriever rank order."""
-    path = run_dir(run, "retriever", seed) / f"candidates_{split}.jsonl"
+    path = retriever_dir / f"candidates_{split}.jsonl"
     return {(c["doc_id"], c["sent_idx"]): [tuple(x) for x in c["candidates"]] for c in load_jsonl(path)}
 
 
@@ -144,7 +145,7 @@ def load_model(path, device):
 def train(args):
     set_seed(args.seed)
     device = pick_device()
-    out = run_dir(args.run, "verifier", args.seed)
+    out = model_dir(args, "verifier")
     pool = technique_pool(args.run, "train")
 
     text = {(r["doc_id"], r["sent_idx"]): r["text"] for r in load_split("train", args.run)}
@@ -156,7 +157,7 @@ def train(args):
 
     dev = load_split("dev", args.run, args.dev_limit)
     dev_pool = technique_pool(args.run, "dev")
-    dev_candidates = load_candidates(args.run, args.seed, "dev")
+    dev_candidates = load_candidates(model_dir(args, "retriever"), "dev")
     positives = sum(y for *_, y in examples)
     print(f"{args.run} run | {len(examples)} pairs ({positives:.0f} positive) | {len(dev)} dev sentences | {device}")
 
@@ -205,7 +206,7 @@ def train(args):
 
     save_json(out / "history.json", history)
     save_json(out / "config.json", {"model": "verifier", "base": BASE, "run": args.run, "seed": args.seed,
-                                    "retriever": str(run_dir(args.run, "retriever", args.seed)),
+                                    "retriever": str(model_dir(args, "retriever")),
                                     "lr": args.lr, "batch_size": args.batch_size, "epochs": args.epochs,
                                     "patience": args.patience, "selected_on": f"dev {args.metric}",
                                     "best_dev": best, "limit": args.limit, "pool": pool})
@@ -216,7 +217,7 @@ def train(args):
 
 def predict(args):
     device = pick_device()
-    out = run_dir(args.run, "verifier", args.seed)
+    out = model_dir(args, "verifier")
     tokenizer = AutoTokenizer.from_pretrained(BASE)
     model = load_model(out / "model.pt", device)
     if args.limit:
@@ -226,7 +227,7 @@ def predict(args):
     for split in ("dev", "test"):
         rows = load_split(split, "full", args.limit)  # every sentence, as evaluate.py expects
         builder = PairBuilder(tokenizer, technique_pool(args.run, split))
-        verified[split] = verify(model, builder, rows, load_candidates(args.run, args.seed, split), device)
+        verified[split] = verify(model, builder, rows, load_candidates(model_dir(args, "retriever"), split), device)
 
     dev = [r for r in load_split("dev", args.run) if (r["doc_id"], r["sent_idx"]) in verified["dev"]]
     best = tune_pipeline(dev, verified["dev"], technique_pool(args.run, "dev"), args.metric)
@@ -257,7 +258,10 @@ def main():
     ap.add_argument("--metric", default="micro_f1", choices=("micro_f1", "macro_f1"),
                     help="dev score for early stopping and for picking k and theta_v")
     ap.add_argument("--log-every", type=int, default=200, help="print the training loss every N steps (0: off)")
+    add_smoke_option(ap)
     args = ap.parse_args()
+    if args.smoke:
+        args.run, args.limit, args.dev_limit, args.epochs, args.log_every = "full", args.limit or 300, 300, 1, 0
     train(args) if args.command == "train" else predict(args)
 
 

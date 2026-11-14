@@ -69,9 +69,12 @@ predict-verifier:
 
 verifier: mine train-verifier predict-verifier
 
-# Whole chain on a few hundred sentences, 1 epoch: catches bugs in minutes. Writes to runs/full/*/seed99/.
+# Quick check that the whole chain runs (a few hundred sentences, 1 epoch, a few minutes).
+# Writes to runs/smoke/; the scores mean nothing.
 smoke:
-	$(MAKE) retriever RUN=full SEED=99 ARGS="--limit 400 --epochs 1"
-	$(MAKE) mine RUN=full SEED=99 MINE_ARGS="--limit 400"
-	$(MAKE) train-verifier RUN=full SEED=99 ARGS="--limit 300 --dev-limit 300 --epochs 1 --log-every 0"
-	$(PYTHON) -m src.verifier predict --run full --seed 99 --limit 300
+	$(PYTHON) -m src.retriever train --smoke
+	$(PYTHON) -m src.retriever predict --smoke
+	$(PYTHON) -m evaluation.evaluate --pred runs/smoke/retriever/test.jsonl --split test > /dev/null
+	$(PYTHON) -m src.mine_negatives --smoke
+	$(PYTHON) -m src.verifier train --smoke
+	$(PYTHON) -m src.verifier predict --smoke

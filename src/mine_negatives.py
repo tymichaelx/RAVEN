@@ -23,7 +23,7 @@ import json
 
 import numpy as np
 
-from src.common import load_jsonl, load_split, run_dir, save_json, technique_pool, technique_texts, write_jsonl
+from src.common import add_smoke_option, load_jsonl, load_split, model_dir, save_json, technique_pool, technique_texts, write_jsonl
 
 
 def mine(rows, candidates, neg_k, unlabeled_k, unlabeled_frac, guard_quantile, seed):
@@ -68,10 +68,13 @@ def main():
     ap.add_argument("--guard-quantile", type=float, default=0.75,
                     help="skip negatives scoring above this quantile of gold-pair scores")
     ap.add_argument("--limit", type=int, help="first N train sentences only (smoke runs)")
+    add_smoke_option(ap)
     args = ap.parse_args()
+    if args.smoke:
+        args.run, args.limit = "full", args.limit or 400
 
-    source = run_dir(args.run, "retriever", args.seed)
-    out = run_dir(args.run, "verifier", args.seed)
+    source = model_dir(args, "retriever")
+    out = model_dir(args, "verifier")
     rows = {(r["doc_id"], r["sent_idx"]): r for r in load_split("train", args.run, args.limit)}
     candidates = {(c["doc_id"], c["sent_idx"]): [tuple(x) for x in c["candidates"]]
                   for c in load_jsonl(source / "candidates_train.jsonl")}

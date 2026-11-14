@@ -98,6 +98,19 @@ def run_dir(run, model, seed):
     return RUNS / run / model / f"seed{seed}"
 
 
+def add_smoke_option(parser):
+    parser.add_argument("--smoke", action="store_true",
+                        help="quick check that the code runs: a few hundred sentences, 1 epoch, "
+                             "written to runs/smoke/<model>/. The scores mean nothing.")
+
+
+def model_dir(args, model):
+    """Folder for a model's files: runs/<run>/<model>/seed<N>/, or runs/smoke/<model>/ with --smoke."""
+    if args.smoke:
+        return RUNS / "smoke" / model
+    return run_dir(args.run, model, args.seed)
+
+
 def save_json(path, obj):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -14,7 +14,7 @@ whose score is at least theta. k and theta are tuned on dev.
 Usage:
   python -m src.retriever train   --run full --seed 0
   python -m src.retriever predict --run full --seed 0
-  (add --limit 300 --epochs 1 for a quick smoke run)
+  (add --smoke for a quick check that the code runs; writes to runs/smoke/retriever/)
 
 Outputs in runs/<run>/retriever/seed<N>/:
   model.pt, config.json, history.json      training
@@ -33,7 +33,7 @@ from torch import nn
 from transformers import AutoModel, AutoTokenizer, get_linear_schedule_with_warmup
 
 from evaluation.evaluate import recall_at_k, write_predictions
-from src.common import (SPLITS, apply_thresholds, load_split, matrix, pick_device, run_dir, save_json,
+from src.common import (SPLITS, add_smoke_option, apply_thresholds, load_split, matrix, model_dir, pick_device, save_json,
                         set_seed, technique_pool, technique_texts, tune_thresholds, write_jsonl)
 
 BASE = "sentence-transformers/all-MiniLM-L6-v2"
@@ -112,7 +112,7 @@ def load_model(path, device):
 def train(args):
     set_seed(args.seed)
     device = pick_device()
-    out = run_dir(args.run, "retriever", args.seed)
+    out = model_dir(args, "retriever")
     pool = technique_pool(args.run, "train")
     texts = technique_texts(pool)
     col = {t: j for j, t in enumerate(pool)}
@@ -183,7 +183,7 @@ def prediction_rows(split, run):
 
 def predict(args):
     device = pick_device()
-    out = run_dir(args.run, "retriever", args.seed)
+    out = model_dir(args, "retriever")
     tokenizer = AutoTokenizer.from_pretrained(BASE)
     model = load_model(out / "model.pt", device)
 
@@ -233,7 +233,10 @@ def main():
     ap.add_argument("--select-k", type=int, default=5, help="early stopping watches dev recall@k")
     ap.add_argument("--metric", default="micro_f1", choices=("micro_f1", "macro_f1"),
                     help="dev score that picks k and theta")
+    add_smoke_option(ap)
     args = ap.parse_args()
+    if args.smoke:
+        args.run, args.limit, args.epochs = "full", args.limit or 400, 1
     train(args) if args.command == "train" else predict(args)
 
 
