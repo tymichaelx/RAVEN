@@ -38,6 +38,17 @@ BASE = "ehsanaghaei/SecureBERT"
 SENT_LEN = 128
 TECH_LEN = 256
 KS = (3, 5, 10)
+PAD_TO = 32
+
+
+def free_gpu_memory(device):
+    if device.type == "mps":
+        torch.mps.empty_cache()
+
+
+def gpu_memory(device):
+    """GPU memory in use, for the progress line (Mac GPU only)."""
+    return f"  gpu {torch.mps.driver_allocated_memory() / 1e9:.1f} GB" if device.type == "mps" else ""
 
 
 class Verifier(nn.Module):
@@ -72,7 +83,9 @@ class PairBuilder:
 
     def batch(self, pairs, device):
         seqs = [self.ids(s, t) for s, t in pairs]
-        width = max(map(len, seqs))
+        # Round the width up to a multiple of PAD_TO: only a few distinct shapes reach the GPU,
+        # so the Mac's GPU reuses memory instead of reserving new memory for every length.
+        width = -(-max(map(len, seqs)) // PAD_TO) * PAD_TO
         input_ids = torch.full((len(seqs), width), self.tokenizer.pad_token_id)
         mask = torch.zeros((len(seqs), width), dtype=torch.long)
         for i, s in enumerate(seqs):
@@ -82,7 +95,7 @@ class PairBuilder:
 
 
 @torch.no_grad()
-def score_pairs(model, builder, pairs, device, batch_size=128):
+def score_pairs(model, builder, pairs, device, batch_size=64):
     """Support probability for each (sentence text, technique id) pair."""
     model.eval()
     # Sort by length so each batch pads little; put results back in the original order.
@@ -178,18 +191,28 @@ def train(args):
         order = rng.permutation(len(examples))
         for b in range(steps_per_epoch):
             batch = [examples[i] for i in order[b * args.batch_size:(b + 1) * args.batch_size]]
-            logits = model(*builder.batch([(s, t) for s, t, _ in batch], device))
-            loss = loss_fn(logits, torch.tensor([y for *_, y in batch], device=device))
+            # Gradient accumulation: run the batch in pieces of --micro-batch pairs and add up the
+            # gradients. Same update as one batch of --batch-size, with less GPU memory at a time.
             optimizer.zero_grad()
-            loss.backward()
+            batch_loss = 0.0
+            for m in range(0, len(batch), args.micro_batch):
+                piece = batch[m:m + args.micro_batch]
+                logits = model(*builder.batch([(s, t) for s, t, _ in piece], device))
+                loss = loss_fn(logits, torch.tensor([y for *_, y in piece], device=device)) * len(piece) / len(batch)
+                loss.backward()
+                batch_loss += loss.item()
             optimizer.step()
             scheduler.step()
-            losses.append(loss.item())
+            losses.append(batch_loss)
+            if (b + 1) % 100 == 0:
+                free_gpu_memory(device)
             if args.log_every and (b + 1) % args.log_every == 0:
                 print(f"  step {b + 1}/{steps_per_epoch}  loss {np.mean(losses[-args.log_every:]):.4f}"
-                      f"  ({time.time() - start:.0f}s)", flush=True)
+                      f"  ({time.time() - start:.0f}s){gpu_memory(device)}", flush=True)
 
+        free_gpu_memory(device)
         dev_best = tune_pipeline(dev, verify(model, builder, dev, dev_candidates, device), dev_pool, args.metric)
+        free_gpu_memory(device)
         history.append({"epoch": epoch, "loss": float(np.mean(losses)), **dev_best, "seconds": round(time.time() - start)})
         print(f"epoch {epoch}  loss {np.mean(losses):.4f}  dev {args.metric} {dev_best[args.metric]:.3f}"
               f" (k={dev_best['k']}, theta={dev_best['theta']:.2f}, P {dev_best['micro_precision']:.3f}"
@@ -207,7 +230,7 @@ def train(args):
     save_json(out / "history.json", history)
     save_json(out / "config.json", {"model": "verifier", "base": BASE, "run": args.run, "seed": args.seed,
                                     "retriever": str(model_dir(args, "retriever")),
-                                    "lr": args.lr, "batch_size": args.batch_size, "epochs": args.epochs,
+                                    "lr": args.lr, "batch_size": args.batch_size, "micro_batch": args.micro_batch, "epochs": args.epochs,
                                     "patience": args.patience, "selected_on": f"dev {args.metric}",
                                     "best_dev": best, "limit": args.limit, "pool": pool})
     print(f"best dev {args.metric} {best:.3f} -> {out / 'model.pt'}")
@@ -253,6 +276,8 @@ def main():
     ap.add_argument("--dev-limit", type=int, help="use only the first N dev sentences during training")
     ap.add_argument("--epochs", type=int, default=5)
     ap.add_argument("--batch-size", type=int, default=32)
+    ap.add_argument("--micro-batch", type=int, default=16,
+                    help="pairs sent to the GPU at once; the batch is split into pieces this size (saves memory)")
     ap.add_argument("--lr", type=float, default=2e-5)
     ap.add_argument("--patience", type=int, default=2, help="epochs without dev improvement before stopping")
     ap.add_argument("--metric", default="micro_f1", choices=("micro_f1", "macro_f1"),
