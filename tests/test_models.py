@@ -6,7 +6,7 @@ import torch
 from evaluation.evaluate import set_scores
 from src.common import f1_counts, load_split, technique_pool, top_k_mask, tune_thresholds
 from src.holdout import load_hidden
-from src.retriever import multi_positive_loss
+from src.retriever import doc_folds, multi_positive_loss
 
 
 def test_loss_ignores_other_true_labels():
@@ -106,3 +106,12 @@ def test_verifier_input_keeps_technique_text_whole():
         assert builder.tech[t] == full, f"{t} description was cut"
         ids = builder.ids(long_sentence, t)
         assert len(ids) <= 512 and ids[-len(full) - 1:-1] == full
+
+
+def test_crossfit_folds_split_whole_documents():
+    rows = load_split("train", "full")
+    folds = doc_folds(rows, 5, seed=0)
+    assert set(folds) == {r["doc_id"] for r in rows}  # every document gets exactly one fold
+    sizes = np.bincount(list(folds.values()), minlength=5)
+    assert sizes.max() - sizes.min() <= 1  # round-robin keeps document counts even
+    assert folds == doc_folds(rows, 5, seed=0)  # same seed, same folds

@@ -1,7 +1,7 @@
 # `uv run` installs anything missing from uv.lock before running.
 PYTHON ?= uv run python
 
-.PHONY: setup techniques fetch dataset eda holdout test evaluate random-baseline train-retriever predict-retriever retriever mine train-verifier predict-verifier verifier smoke
+.PHONY: setup techniques fetch dataset eda holdout test evaluate random-baseline train-retriever predict-retriever retriever crossfit mine train-verifier predict-verifier verifier smoke
 
 setup:
 	uv sync
@@ -52,11 +52,20 @@ predict-retriever:
 
 retriever: train-retriever predict-retriever
 
+# Cross-fitting: FOLDS retrievers, each trained without one fold of train documents, rank the
+# sentences of the fold they did not see. Gives the verifier train candidates like dev/test ones.
+FOLDS ?= 5
+crossfit:
+	for f in $$(seq 0 $$(($(FOLDS) - 1))); do \
+		$(PYTHON) -m src.retriever train --run $(RUN) --seed $(SEED) --folds $(FOLDS) --fold $$f $(ARGS) || exit 1; \
+	done
+	$(PYTHON) -m src.retriever crossfit --run $(RUN) --seed $(SEED) --folds $(FOLDS)
+
 VERIFIER_DIR = runs/$(RUN)/verifier/seed$(SEED)
 
-# Verifier training pairs from the retriever's mistakes on train (needs predict-retriever first).
+# Verifier training pairs from the retriever's mistakes on train (needs crossfit first).
 mine:
-	$(PYTHON) -m src.mine_negatives --run $(RUN) --seed $(SEED) $(MINE_ARGS)
+	$(PYTHON) -m src.mine_negatives --run $(RUN) --seed $(SEED) $(MINE_make ARGS)
 
 train-verifier:
 	$(PYTHON) -m src.verifier train --run $(RUN) --seed $(SEED) $(ARGS)
@@ -75,6 +84,9 @@ smoke:
 	$(PYTHON) -m src.retriever train --smoke
 	$(PYTHON) -m src.retriever predict --smoke
 	$(PYTHON) -m evaluation.evaluate --pred runs/smoke/retriever/test.jsonl --split test > /dev/null
+	$(PYTHON) -m src.retriever train --smoke --folds 2 --fold 0
+	$(PYTHON) -m src.retriever train --smoke --folds 2 --fold 1
+	$(PYTHON) -m src.retriever crossfit --smoke --folds 2
 	$(PYTHON) -m src.mine_negatives --smoke
 	$(PYTHON) -m src.verifier train --smoke
 	$(PYTHON) -m src.verifier predict --smoke

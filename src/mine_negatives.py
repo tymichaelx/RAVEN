@@ -11,7 +11,10 @@ least as high as a typical true pair (default: the 75th percentile of gold-pair 
 may be a missed label, so it is left out of training and written to spot_check.csv for
 a look by hand.
 
-Reads  runs/<run>/retriever/seed<N>/candidates_train.jsonl  (from `python -m src.retriever predict`)
+Reads  runs/<run>/retriever/seed<N>/candidates_train_crossfit.jsonl  (from `python -m src.retriever crossfit`)
+       Each train sentence there was ranked by a retriever that did not train on it, like
+       dev and test. --candidates insample uses candidates_train.jsonl from the main
+       retriever instead (it trained on these sentences; kept for comparison).
 Writes runs/<run>/verifier/seed<N>/pairs_train.jsonl, spot_check.csv, mining.json
 
 Usage:
@@ -68,6 +71,8 @@ def main():
     ap.add_argument("--guard-quantile", type=float, default=0.75,
                     help="skip negatives scoring above this quantile of gold-pair scores")
     ap.add_argument("--limit", type=int, help="first N train sentences only (smoke runs)")
+    ap.add_argument("--candidates", default="crossfit", choices=("crossfit", "insample"),
+                    help="train candidates from the cross-fitted fold retrievers (default) or the main retriever")
     add_smoke_option(ap)
     args = ap.parse_args()
     if args.smoke:
@@ -76,8 +81,10 @@ def main():
     source = model_dir(args, "retriever")
     out = model_dir(args, "verifier")
     rows = {(r["doc_id"], r["sent_idx"]): r for r in load_split("train", args.run, args.limit)}
-    candidates = {(c["doc_id"], c["sent_idx"]): [tuple(x) for x in c["candidates"]]
-                  for c in load_jsonl(source / "candidates_train.jsonl")}
+    path = source / ("candidates_train_crossfit.jsonl" if args.candidates == "crossfit" else "candidates_train.jsonl")
+    if not path.exists():
+        raise SystemExit(f"missing {path}: run `make crossfit` first (or pass --candidates insample)")
+    candidates = {(c["doc_id"], c["sent_idx"]): [tuple(x) for x in c["candidates"]] for c in load_jsonl(path)}
     candidates = {k: candidates[k] for k in rows}
 
     pairs, skipped, summary = mine(rows, candidates, args.neg_k, args.unlabeled_k, args.unlabeled_frac,
@@ -96,7 +103,7 @@ def main():
             r = rows[p["key"]]
             w.writerow([f"{p['retriever_score']:.3f}", p["technique"], names[p["technique"]].split(":")[0],
                         " ".join(r["labels"]), r["text"], ""])
-    save_json(out / "mining.json", {"retriever": str(source), "run": args.run, **summary})
+    save_json(out / "mining.json", {"retriever": str(source), "candidates": str(path), "run": args.run, **summary})
     print(json.dumps(summary, indent=2))
 
 

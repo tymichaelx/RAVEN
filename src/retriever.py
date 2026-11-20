@@ -11,9 +11,18 @@ its other true labels. Unlabeled sentences don't enter the loss.
 On its own, the retriever is the single-stage system: predict the top-k techniques
 whose score is at least theta. k and theta are tuned on dev.
 
+Cross-fitting (for the verifier's training data): the main retriever has trained on
+every train sentence, so its train candidates are better than what it produces on
+unseen text. `train --fold i` trains on the train documents outside fold i;
+`crossfit` then scores each fold's sentences with the model that did not see them and
+writes candidates_train_crossfit.jsonl, which src/mine_negatives.py reads. Folds are
+whole documents, so sentences from one report never sit on both sides.
+
 Usage:
-  python -m src.retriever train   --run full --seed 0
-  python -m src.retriever predict --run full --seed 0
+  python -m src.retriever train    --run full --seed 0
+  python -m src.retriever predict  --run full --seed 0
+  python -m src.retriever train    --run full --seed 0 --fold 0     (then folds 1..4)
+  python -m src.retriever crossfit --run full --seed 0
   (add --smoke for a quick check that the code runs; writes to runs/smoke/retriever/)
 
 Outputs in runs/<run>/retriever/seed<N>/:
@@ -21,6 +30,8 @@ Outputs in runs/<run>/retriever/seed<N>/:
   thresholds.json                          k and theta picked on dev
   dev.jsonl, test.jsonl                    predictions for evaluation/evaluate.py
   candidates_{train,dev,test}.jsonl        top 10 techniques per sentence, the verifier's input
+  fold<i>/                                 cross-fitting models (train --fold i)
+  candidates_train_crossfit.jsonl          train candidates from the fold models (crossfit)
 """
 import argparse
 import math
@@ -101,6 +112,30 @@ def dev_recall(model, tokenizer, dev, pool, device):
     return recalls
 
 
+def doc_folds(rows, folds, seed):
+    """{doc_id: fold}. Documents are shuffled with the seed and dealt round-robin into folds."""
+    docs = sorted({r["doc_id"] for r in rows})
+    order = np.random.default_rng(seed).permutation(len(docs))
+    return {docs[j]: i % folds for i, j in enumerate(order)}
+
+
+def crossfit_rows(args):
+    """The train sentences that are split into folds. train --fold and crossfit must agree on them."""
+    return load_split("train", args.run, args.limit)
+
+
+def fold_dir(args, fold):
+    return model_dir(args, "retriever") / f"fold{fold}"
+
+
+def candidate_rows(rows, scores):
+    """Top K_MAX techniques per sentence, best first (ties: technique id)."""
+    return [{"doc_id": r["doc_id"], "sent_idx": r["sent_idx"],
+             "candidates": [[t, s] for t, s in sorted(scores[(r["doc_id"], r["sent_idx"])].items(),
+                                                      key=lambda x: (-x[1], x[0]))[:K_MAX]]}
+            for r in rows]
+
+
 def load_model(path, device):
     model = Retriever()
     model.load_state_dict(torch.load(path, map_location="cpu"))
@@ -117,9 +152,20 @@ def train(args):
     texts = technique_texts(pool)
     col = {t: j for j, t in enumerate(pool)}
 
-    labeled = [r for r in load_split("train", args.run, args.limit) if r["labels"]]
+    train_rows = crossfit_rows(args)
+    fold_note = ""
+    if args.fold is not None:
+        if not 0 <= args.fold < args.folds:
+            raise SystemExit(f"--fold must be in 0..{args.folds - 1}")
+        folds = doc_folds(train_rows, args.folds, args.seed)
+        train_rows = [r for r in train_rows if folds[r["doc_id"]] != args.fold]
+        out = fold_dir(args, args.fold)
+        fold_note = f" | fold {args.fold}/{args.folds} held out"
+    labeled = [r for r in train_rows if r["labels"]]
+    if not labeled:
+        raise SystemExit("no labeled training sentences (too few documents for this many folds?)")
     dev = load_split("dev", args.run, args.limit)
-    print(f"{args.run} run | {len(labeled)} labeled training sentences | {len(pool)} techniques | {device}")
+    print(f"{args.run} run | {len(labeled)} labeled training sentences | {len(pool)} techniques | {device}{fold_note}")
 
     tokenizer = AutoTokenizer.from_pretrained(BASE)
     model = Retriever().to(device)
@@ -169,7 +215,8 @@ def train(args):
     save_json(out / "config.json", {"model": "retriever", "base": BASE, "run": args.run, "seed": args.seed,
                                     "lr": args.lr, "batch_size": args.batch_size, "epochs": args.epochs,
                                     "tau": args.tau, "patience": args.patience, "selected_on": select,
-                                    "best_dev": best, "limit": args.limit, "pool": pool})
+                                    "best_dev": best, "limit": args.limit, "fold": args.fold,
+                                    "folds": args.folds if args.fold is not None else None, "pool": pool})
     print(f"best dev {select} {best:.3f} -> {out / 'model.pt'}")
 
 
@@ -192,11 +239,7 @@ def predict(args):
         pool = technique_pool(args.run, split)
         rows = prediction_rows(split, args.run)
         scores[split] = rank(model, tokenizer, rows, pool, device)
-        write_jsonl(out / f"candidates_{split}.jsonl", [
-            {"doc_id": r["doc_id"], "sent_idx": r["sent_idx"],
-             "candidates": [[t, s] for t, s in sorted(scores[split][(r["doc_id"], r["sent_idx"])].items(),
-                                                      key=lambda x: (-x[1], x[0]))[:K_MAX]]}
-            for r in rows])
+        write_jsonl(out / f"candidates_{split}.jsonl", candidate_rows(rows, scores[split]))
 
     # Tune k and theta on dev, with the dev sentences and labels this run trains with.
     dev_pool = technique_pool(args.run, "dev")
@@ -219,9 +262,47 @@ def predict(args):
     print(f"predictions -> {out}/dev.jsonl, {out}/test.jsonl")
 
 
+# ---------------------------------------------------------------- crossfit
+
+def crossfit(args):
+    """Score each fold's train sentences with the fold model that did not train on them."""
+    device = pick_device()
+    out = model_dir(args, "retriever")
+    tokenizer = AutoTokenizer.from_pretrained(BASE)
+    pool = technique_pool(args.run, "train")
+    rows = crossfit_rows(args)
+    folds = doc_folds(rows, args.folds, args.seed)
+
+    scores = {}
+    for fold in range(args.folds):
+        path = fold_dir(args, fold) / "model.pt"
+        if not path.exists():
+            raise SystemExit(f"missing {path}: run `train --fold {fold}` first")
+        part = [r for r in rows if folds[r["doc_id"]] == fold]
+        if part:
+            scores.update(rank(load_model(path, device), tokenizer, part, pool, device))
+        print(f"fold {fold}: {len(part)} sentences scored")
+
+    write_jsonl(out / "candidates_train_crossfit.jsonl", candidate_rows(rows, scores))
+
+    # Gap check: in-sample candidates (main model) against cross-fitted ones, on the same sentences.
+    labeled = [r for r in rows if r["labels"]]
+    gold = {(r["doc_id"], r["sent_idx"]): set(r["labels"]) for r in labeled}
+    report = {"folds": args.folds, "sentences": len(rows)}
+    if (out / "model.pt").exists():
+        main_scores = rank(load_model(out / "model.pt", device), tokenizer, labeled, pool, device)
+        report["in_sample"], _ = recall_at_k(gold, main_scores, pool, ks=(1, 5, 10))
+    report["crossfit"], _ = recall_at_k(gold, scores, pool, ks=(1, 5, 10))
+    save_json(out / "crossfit.json", report)
+    for name in ("in_sample", "crossfit"):
+        if name in report:
+            print(f"train {name:9} " + "  ".join(f"{k} {v:.3f}" for k, v in report[name].items()))
+    print(f"-> {out / 'candidates_train_crossfit.jsonl'}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=("train", "predict"))
+    ap.add_argument("command", choices=("train", "predict", "crossfit"))
     ap.add_argument("--run", default="full", choices=("full", "withheld"))
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--limit", type=int, help="use only the first N train and dev sentences (smoke runs)")
@@ -233,11 +314,13 @@ def main():
     ap.add_argument("--select-k", type=int, default=5, help="early stopping watches dev recall@k")
     ap.add_argument("--metric", default="micro_f1", choices=("micro_f1", "macro_f1"),
                     help="dev score that picks k and theta")
+    ap.add_argument("--folds", type=int, default=5, help="cross-fitting: number of document folds")
+    ap.add_argument("--fold", type=int, help="train: hold out this fold (cross-fitting model)")
     add_smoke_option(ap)
     args = ap.parse_args()
     if args.smoke:
         args.run, args.limit, args.epochs = "full", args.limit or 400, 1
-    train(args) if args.command == "train" else predict(args)
+    {"train": train, "predict": predict, "crossfit": crossfit}[args.command](args)
 
 
 if __name__ == "__main__":
