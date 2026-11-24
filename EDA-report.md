@@ -1,4 +1,4 @@
-
+l
 1. Label presence (Figure 1)
 2. Label frequency and scope (Figure 2)
 3. Labels per sentence (Table 1)
@@ -30,11 +30,11 @@ Because a few techniques dominate the labels, micro-averaged F1, which pools all
 
 Most labeled sentences describe a single technique, but a substantial share describe more than one.
 
-|Split|No label|1 label|2 labels|3+ labels|Labeled sentences with 2+ labels|
-|---|---|---|---|---|---|
-|Train|10,565|2,327|448|96|18.9%|
-|Dev|1,929|444|96|34|22.6%|
-|Test|2,368|464|125|32|25.3%|
+| Split | No label | 1 label | 2 labels | 3+ labels | Labeled sentences with 2+ labels |
+|-------|----------|---------|----------|-----------|----------------------------------|
+| Train | 10,565   | 2,327   | 448      | 96        | 18.9%                            |
+| Dev   | 1,929    | 444     | 96       | 34        | 22.6%                            |
+| Test  | 2,368    | 464     | 125      | 32        | 25.3%                            |
 
 Table 1: Number of technique labels per sentence.
 
@@ -115,13 +115,13 @@ Table 4: Breakdown of cutoffs for tokens and percent truncated
 
 The exploratory analysis establishes five properties of the data, each of which shapes the system design:
 
-|Finding|Design consequence|
-|---|---|
-|79% of sentences describe no technique, consistently across splits|Both stages use thresholds that allow a sentence to receive no prediction; evaluation uses precision, recall, and F1 rather than accuracy; the verifier is trained to reject candidates for unlabeled sentences|
-|Technique frequency is highly uneven; 40 of 50 techniques have at least 20 training sentences and cover 95.2% of test labels|Evaluation is restricted to those 40 techniques, and macro-F1 is reported alongside micro-F1|
-|18.9% of labeled training sentences carry more than one technique|The retriever’s loss allows multiple correct techniques per sentence|
-|Sentences share few words with their labeled technique’s description, which has the highest word overlap in only 19.1% of cases|Techniques cannot be identified by keyword matching; the retriever is trained to match sentences to descriptions|
-|Frequently co-labeled techniques, such as T1027 and T1140, and report-specific vocabulary appear in the data|Co-labeled pairs are a focus for error analysis; report-level splits prevent models from scoring well by memorizing report-specific words|
+| Finding                                                                                                                         | Design consequence                                                                                                                                                                                              |
+|---------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 79% of sentences describe no technique, consistently across splits                                                              | Both stages use thresholds that allow a sentence to receive no prediction; evaluation uses precision, recall, and F1 rather than accuracy; the verifier is trained to reject candidates for unlabeled sentences |
+| Technique frequency is highly uneven; 40 of 50 techniques have at least 20 training sentences and cover 95.2% of test labels    | Evaluation is restricted to those 40 techniques, and macro-F1 is reported alongside micro-F1                                                                                                                    |
+| 18.9% of labeled training sentences carry more than one technique                                                               | The retriever’s loss allows multiple correct techniques per sentence                                                                                                                                            |
+| Sentences share few words with their labeled technique’s description, which has the highest word overlap in only 19.1% of cases | Techniques cannot be identified by keyword matching; the retriever is trained to match sentences to descriptions                                                                                                |
+| Frequently co-labeled techniques, such as T1027 and T1140, and report-specific vocabulary appear in the data                    | Co-labeled pairs are a focus for error analysis; report-level splits prevent models from scoring well by memorizing report-specific words                                                                       |
 Table 5: SUmmary of Exploratory analysis findings. 
 
 The input lengths support the chosen configuration. A 128-token sentence cutoff keeps over 97% of sentences intact under both tokenizers, and no technique description is truncated. The analysis also found technique and tactic IDs written directly in some sentences, which would let a model read the answer from the input; these are masked during preprocessing.
