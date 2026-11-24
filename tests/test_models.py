@@ -138,3 +138,14 @@ def test_curves_verdicts():
     v = diagnose(_history([0.5, 0.6, 0.6, 0.6, 0.6], falling, [0.4, 0.3, 0.3, 0.3, 0.3]),
                  {"epochs": 10}, "micro_f1")
     assert v["verdict"].startswith("plateau")
+
+
+def test_llm_answer_parsing():
+    from src.llm_baseline import parse
+    pool = ["T1055", "T1218"]
+    answer = '{"techniques": [{"id": "T1055", "confidence": 1.4}, {"id": "T9999", "confidence": 0.9},' \
+             ' {"id": "T1218", "confidence": 0.2}, {"id": "T1218", "confidence": 0.6}]}'
+    assert parse(answer, pool) == ({"T1055": 1.0, "T1218": 0.6}, True)  # clipped, unknown dropped, max kept
+    assert parse('{"techniques": []}', pool) == ({}, True)
+    assert parse("not json", pool) == ({}, False)
+    assert parse('{"other": 1}', pool) == ({}, False)
