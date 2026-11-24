@@ -42,10 +42,6 @@ from src.common import (RUNS, add_smoke_option, apply_thresholds, load_jsonl, lo
                         technique_pool, tune_thresholds)
 
 DEFAULT_MODEL = "llama3.1:8b"
-# num_predict caps the answer length. Without it the model sometimes repeats list items
-# forever (Ollama keeps going by shifting the context), and one sentence takes 8+ minutes.
-# 600 tokens fits ~28 techniques, more than any real answer; a capped answer is cut-off JSON,
-# so it counts as a parse failure (no prediction), exactly as the runaway did before.
 OPTIONS = {"temperature": 0, "num_ctx": 4096, "num_predict": 600}
 REQUEST_TIMEOUT = 120  # seconds; a safety net, normal answers take under 2 s
 SPLITS = ("dev", "test")
