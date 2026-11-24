@@ -42,7 +42,12 @@ from src.common import (RUNS, add_smoke_option, apply_thresholds, load_jsonl, lo
                         technique_pool, tune_thresholds)
 
 DEFAULT_MODEL = "llama3.1:8b"
-OPTIONS = {"temperature": 0, "num_ctx": 4096}
+# num_predict caps the answer length. Without it the model sometimes repeats list items
+# forever (Ollama keeps going by shifting the context), and one sentence takes 8+ minutes.
+# 600 tokens fits ~28 techniques, more than any real answer; a capped answer is cut-off JSON,
+# so it counts as a parse failure (no prediction), exactly as the runaway did before.
+OPTIONS = {"temperature": 0, "num_ctx": 4096, "num_predict": 600}
+REQUEST_TIMEOUT = 120  # seconds; a safety net, normal answers take under 2 s
 SPLITS = ("dev", "test")
 
 
@@ -115,7 +120,7 @@ def label_split(rows, raw_path, model, system, fmt, pool, workers):
     print(f"{raw_path.name}: {len(done)} done, {len(todo)} to go")
     if not todo:
         return
-    client = ollama.Client()
+    client = ollama.Client(timeout=REQUEST_TIMEOUT)
     start, failures = time.time(), 0
     raw_path.parent.mkdir(parents=True, exist_ok=True)
     with open(raw_path, "a") as f, ThreadPoolExecutor(workers) as pool_exec:
