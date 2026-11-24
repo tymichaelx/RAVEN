@@ -26,7 +26,9 @@ Usage:
   (add --smoke for a quick check that the code runs; writes to runs/smoke/retriever/)
 
 Outputs in runs/<run>/retriever/seed<N>/:
-  model.pt, config.json, history.json      training
+  model.pt, config.json, history.json      training (history: per epoch, train loss, dev loss, dev
+                                           recall@k, and recall@k on a fixed train sample, for
+                                           evaluation/curves.py)
   thresholds.json                          k and theta picked on dev
   dev.jsonl, test.jsonl                    predictions for evaluation/evaluate.py
   candidates_{train,dev,test}.jsonl        top 10 techniques per sentence, the verifier's input
@@ -105,11 +107,28 @@ def rank(model, tokenizer, rows, pool, device):
     return {(r["doc_id"], r["sent_idx"]): dict(zip(pool, map(float, sims[i]))) for i, r in enumerate(rows)}
 
 
-def dev_recall(model, tokenizer, dev, pool, device):
-    gold = {(r["doc_id"], r["sent_idx"]): set(r["labels"]) for r in dev if r["labels"]}
-    labeled = [r for r in dev if r["labels"]]
-    recalls, _ = recall_at_k(gold, rank(model, tokenizer, labeled, pool, device), pool, ks=(1, 3, 5, 10))
-    return recalls
+@torch.no_grad()
+def epoch_metrics(model, tokenizer, rows, pool, device, tau):
+    """Contrastive loss and recall@k on the labeled sentences of `rows`, in eval mode (no dropout).
+
+    Same loss as training, so dev loss and train loss are on one scale.
+    """
+    labeled = [r for r in rows if r["labels"]]
+    col = {t: j for j, t in enumerate(pool)}
+    texts = technique_texts(pool)
+    tech = encode(model, tokenizer, [texts[t] for t in pool], TECH_LEN, device)
+    sent = encode(model, tokenizer, [r["text"] for r in labeled], SENT_LEN, device)
+    sims = sent @ tech.T
+    positives = torch.zeros(sims.shape, dtype=torch.bool)
+    for i, r in enumerate(labeled):
+        positives[i, [col[t] for t in r["labels"]]] = True
+    loss = multi_positive_loss(sims, positives.to(sims.device), tau).item()
+    S = sims.float().cpu().numpy()
+    keys = [(r["doc_id"], r["sent_idx"]) for r in labeled]
+    scores = {key: dict(zip(pool, map(float, S[i]))) for i, key in enumerate(keys)}
+    gold = {key: set(r["labels"]) for key, r in zip(keys, labeled)}
+    recalls, _ = recall_at_k(gold, scores, pool, ks=(1, 3, 5, 10))
+    return loss, recalls
 
 
 def doc_folds(rows, folds, seed):
@@ -165,6 +184,10 @@ def train(args):
     if not labeled:
         raise SystemExit("no labeled training sentences (too few documents for this many folds?)")
     dev = load_split("dev", args.run, args.limit)
+    # A fixed sample of training sentences, scored like dev each epoch: the train side of the
+    # train/dev gap. Its own generator, so the training order does not change.
+    sample_idx = np.random.default_rng(args.seed + 1).permutation(len(labeled))[:args.train_sample]
+    train_sample = [labeled[i] for i in sorted(sample_idx)]
     print(f"{args.run} run | {len(labeled)} labeled training sentences | {len(pool)} techniques | {device}{fold_note}")
 
     tokenizer = AutoTokenizer.from_pretrained(BASE)
@@ -197,10 +220,17 @@ def train(args):
             scheduler.step()
             losses.append(loss.item())
 
-        recalls = dev_recall(model, tokenizer, dev, pool, device)
-        history.append({"epoch": epoch, "loss": float(np.mean(losses)), **recalls, "seconds": round(time.time() - start)})
-        print(f"epoch {epoch:2}  loss {np.mean(losses):.4f}  dev " +
-              "  ".join(f"{k} {v:.3f}" for k, v in recalls.items()) + f"  ({time.time() - start:.0f}s)")
+        dev_loss, recalls = epoch_metrics(model, tokenizer, dev, pool, device, args.tau)
+        entry = {"epoch": epoch, "loss": float(np.mean(losses)), "dev_loss": dev_loss, **recalls}
+        if train_sample:
+            _, train_recalls = epoch_metrics(model, tokenizer, train_sample, pool, device, args.tau)
+            entry.update({f"train_{k}": v for k, v in train_recalls.items()})
+        entry["seconds"] = round(time.time() - start)
+        history.append(entry)
+        print(f"epoch {epoch:2}  loss {np.mean(losses):.4f}  dev loss {dev_loss:.4f}  dev " +
+              "  ".join(f"{k} {v:.3f}" for k, v in recalls.items()) +
+              (f"  train {select} {entry[f'train_{select}']:.3f}" if train_sample else "") +
+              f"  ({time.time() - start:.0f}s)")
         if recalls[select] > best:
             best, bad_epochs = recalls[select], 0
             out.mkdir(parents=True, exist_ok=True)
@@ -312,6 +342,8 @@ def main():
     ap.add_argument("--tau", type=float, default=0.05, help="temperature of the contrastive loss")
     ap.add_argument("--patience", type=int, default=3, help="epochs without dev improvement before stopping")
     ap.add_argument("--select-k", type=int, default=5, help="early stopping watches dev recall@k")
+    ap.add_argument("--train-sample", type=int, default=1000,
+                    help="labeled train sentences scored each epoch for the train/dev gap (0: off)")
     ap.add_argument("--metric", default="micro_f1", choices=("micro_f1", "macro_f1"),
                     help="dev score that picks k and theta")
     ap.add_argument("--folds", type=int, default=5, help="cross-fitting: number of document folds")

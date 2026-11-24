@@ -17,13 +17,18 @@ Add --smoke for a quick check that the code runs (writes to runs/smoke/verifier/
 Uses runs/<run>/retriever/seed<N>/candidates_*.jsonl and runs/<run>/verifier/seed<N>/pairs_train.jsonl.
 
 Outputs in runs/<run>/verifier/seed<N>/:
-  model.pt, config.json, history.json      training
+  model.pt, config.json, history.json      training (history: per epoch, train loss; dev loss on
+                                           dev pairs mined like the training pairs; dev pipeline
+                                           scores; pipeline scores on a fixed train sample, with
+                                           thresholds tuned on that sample; for evaluation/curves.py)
   thresholds.json                          k and theta_v picked on dev
   dev.jsonl, test.jsonl                    two-stage predictions for evaluation/evaluate.py
 """
 import argparse
+import json
 import math
 import time
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -31,6 +36,7 @@ from torch import nn
 from transformers import AutoModel, AutoTokenizer, get_linear_schedule_with_warmup
 
 from evaluation.evaluate import write_predictions
+from src.mine_negatives import mine
 from src.common import (add_smoke_option, load_jsonl, load_split, model_dir, pick_device, save_json, set_seed, technique_pool,
                         technique_texts, tune_thresholds)
 
@@ -147,6 +153,29 @@ def tune_pipeline(rows, verified, pool, metric):
     return best
 
 
+def mined_pairs(rows, candidates, mining):
+    """(text, technique, label) pairs mined from `rows` with the training pairs' settings (mining.json)."""
+    keyed = {(r["doc_id"], r["sent_idx"]): r for r in rows}
+    pairs, _, _ = mine(keyed, {k: candidates[k] for k in keyed}, mining.get("neg_k", 5), mining.get("unlabeled_k", 3),
+                       mining.get("unlabeled_frac", 0.4), mining.get("guard_quantile", 0.75), mining.get("seed", 0))
+    return [(keyed[p["key"]]["text"], p["technique"], float(p["label"])) for p in pairs]
+
+
+def pair_loss(model, builder, pairs, device):
+    """Mean binary cross-entropy over (text, technique, label) pairs, in eval mode. Same loss as training."""
+    probs = np.clip(score_pairs(model, builder, [(s, t) for s, t, _ in pairs], device), 1e-7, 1 - 1e-7)
+    y = np.array([label for *_, label in pairs])
+    return float(-np.mean(y * np.log(probs) + (1 - y) * np.log(1 - probs)))
+
+
+def train_candidates_path(out, retriever_dir):
+    """The train candidates the training pairs were mined from (recorded in mining.json)."""
+    mining_file = out / "mining.json"
+    if mining_file.exists() and "candidates" in (m := json.loads(mining_file.read_text())):
+        return Path(m["candidates"])
+    return retriever_dir / "candidates_train_crossfit.jsonl"
+
+
 def load_model(path, device):
     model = Verifier()
     model.load_state_dict(torch.load(path, map_location="cpu"))
@@ -171,6 +200,18 @@ def train(args):
     dev = load_split("dev", args.run, args.dev_limit)
     dev_pool = technique_pool(args.run, "dev")
     dev_candidates = load_candidates(model_dir(args, "retriever"), "dev")
+    mining = json.loads((out / "mining.json").read_text()) if (out / "mining.json").exists() else {}
+    dev_pairs = mined_pairs(dev, dev_candidates, mining)
+
+    # A fixed sample of training sentences, run through the pipeline each epoch: the train side
+    # of the train/dev gap. Thresholds are re-tuned on the sample itself (a diagnostic, not a result).
+    train_candidates, train_sample = {}, []
+    if args.train_sample:
+        path = train_candidates_path(out, model_dir(args, "retriever"))
+        train_candidates = {(c["doc_id"], c["sent_idx"]): [tuple(x) for x in c["candidates"]] for c in load_jsonl(path)}
+        train_rows = [r for r in load_split("train", args.run) if (r["doc_id"], r["sent_idx"]) in train_candidates]
+        sample_idx = np.random.default_rng(args.seed + 1).permutation(len(train_rows))[:args.train_sample]
+        train_sample = [train_rows[i] for i in sorted(sample_idx)]
     positives = sum(y for *_, y in examples)
     print(f"{args.run} run | {len(examples)} pairs ({positives:.0f} positive) | {len(dev)} dev sentences | {device}")
 
@@ -212,11 +253,20 @@ def train(args):
 
         free_gpu_memory(device)
         dev_best = tune_pipeline(dev, verify(model, builder, dev, dev_candidates, device), dev_pool, args.metric)
+        dev_loss = pair_loss(model, builder, dev_pairs, device)
+        entry = {"epoch": epoch, "loss": float(np.mean(losses)), "dev_loss": dev_loss, **dev_best}
+        if train_sample:
+            train_best = tune_pipeline(train_sample, verify(model, builder, train_sample, train_candidates, device),
+                                       pool, args.metric)
+            entry.update({f"train_{k}": v for k, v in train_best.items()})
         free_gpu_memory(device)
-        history.append({"epoch": epoch, "loss": float(np.mean(losses)), **dev_best, "seconds": round(time.time() - start)})
-        print(f"epoch {epoch}  loss {np.mean(losses):.4f}  dev {args.metric} {dev_best[args.metric]:.3f}"
+        entry["seconds"] = round(time.time() - start)
+        history.append(entry)
+        print(f"epoch {epoch}  loss {np.mean(losses):.4f}  dev loss {dev_loss:.4f}  dev {args.metric} {dev_best[args.metric]:.3f}"
               f" (k={dev_best['k']}, theta={dev_best['theta']:.2f}, P {dev_best['micro_precision']:.3f}"
-              f" R {dev_best['micro_recall']:.3f})  ({time.time() - start:.0f}s)", flush=True)
+              f" R {dev_best['micro_recall']:.3f})" +
+              (f"  train {args.metric} {entry[f'train_{args.metric}']:.3f}" if train_sample else "") +
+              f"  ({time.time() - start:.0f}s)", flush=True)
         if dev_best[args.metric] > best:
             best, bad_epochs = dev_best[args.metric], 0
             out.mkdir(parents=True, exist_ok=True)
@@ -283,10 +333,13 @@ def main():
     ap.add_argument("--metric", default="micro_f1", choices=("micro_f1", "macro_f1"),
                     help="dev score for early stopping and for picking k and theta_v")
     ap.add_argument("--log-every", type=int, default=200, help="print the training loss every N steps (0: off)")
+    ap.add_argument("--train-sample", type=int, default=1000,
+                    help="train sentences run through the pipeline each epoch for the train/dev gap (0: off)")
     add_smoke_option(ap)
     args = ap.parse_args()
     if args.smoke:
         args.run, args.limit, args.dev_limit, args.epochs, args.log_every = "full", args.limit or 300, 300, 1, 0
+        args.train_sample = min(args.train_sample, 200)
     train(args) if args.command == "train" else predict(args)
 
 
