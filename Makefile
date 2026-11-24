@@ -1,7 +1,7 @@
 # `uv run` installs anything missing from uv.lock before running.
 PYTHON ?= uv run python
 
-.PHONY: setup techniques fetch dataset eda holdout test evaluate random-baseline train-retriever predict-retriever retriever crossfit mine train-verifier predict-verifier verifier smoke
+.PHONY: setup techniques fetch dataset eda holdout test evaluate random-baseline train-retriever predict-retriever retriever crossfit mine train-verifier predict-verifier verifier curves smoke
 
 setup:
 	uv sync
@@ -78,6 +78,11 @@ predict-verifier:
 
 verifier: mine train-verifier predict-verifier
 
+# Training curves and a trained-properly verdict per seed, from every history.json of RUN.
+# Writes runs/<RUN>/<model>/curves.png and curves.json.
+curves:
+	$(PYTHON) -m evaluation.curves --run $(RUN)
+
 # Quick check that the whole chain runs (a few hundred sentences, 1 epoch, a few minutes).
 # Writes to runs/smoke/; the scores mean nothing.
 smoke:
@@ -90,3 +95,4 @@ smoke:
 	$(PYTHON) -m src.mine_negatives --smoke
 	$(PYTHON) -m src.verifier train --smoke
 	$(PYTHON) -m src.verifier predict --smoke
+	$(PYTHON) -m evaluation.curves --smoke
