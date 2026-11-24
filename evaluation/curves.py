@@ -26,18 +26,21 @@ Usage:
 """
 import argparse
 import json
+import re
 from pathlib import Path
 
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.lines import Line2D  # noqa: E402
 
 RUNS = Path("runs")
 MODELS = ("retriever", "verifier")
 
-# Fixed roles, same in both panels: train is always blue, dev always orange.
-TRAIN, DEV = "#2a78d6", "#eb6834"
+# Color = seed (seed N always gets slot N, so a seed keeps its color whichever seeds are plotted).
+# Line style = what was measured: dev solid, train dashed. Same in both panels.
+SEED_COLORS = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948")
 INK, MUTED, GRID = "#2b2b29", "#6b6a63", "#e4e3dd"
 
 RISE = 0.05       # dev loss this far above its minimum counts as rising
@@ -126,48 +129,53 @@ def style(ax, title, ylabel):
     ax.xaxis.get_major_locator().set_params(integer=True)
 
 
-def line(ax, history, key, color, label):
+def seed_color(seed):
+    number = re.search(r"\d+", seed)
+    return SEED_COLORS[int(number.group()) % len(SEED_COLORS) if number else 0]
+
+
+def line(ax, history, key, color, dashed):
     x, y = series(history, key)
     if x:
-        ax.plot(x, y, color=color, linewidth=2, marker="o", markersize=5, label=label, alpha=0.9)
+        ax.plot(x, y, color=color, linewidth=2, linestyle="--" if dashed else "-", marker="o",
+                markersize=4 if dashed else 5, alpha=0.9)
     return x, y
 
 
-def end_label(ax, x, y, text):
-    """Name a line at its last point (the legend repeats it)."""
-    if x:
-        ax.annotate(text, (x[-1], y[-1]), xytext=(6, 0), textcoords="offset points", va="center",
-                    fontsize=9, color=INK)
+def mark_best(ax, x, y, epoch, color):
+    """Star on the saved (best) epoch, ringed in the surface color so it reads over the line."""
+    if epoch in x:
+        ax.plot(epoch, y[x.index(epoch)], marker="*", markersize=14, color=color,
+                markeredgecolor="#fcfcfb", markeredgewidth=1.2, zorder=5)
 
 
 def plot(runs, model, metric, path, title):
-    fig, (loss_ax, metric_ax) = plt.subplots(1, 2, figsize=(11, 4), facecolor="#fcfcfb")
+    fig, (loss_ax, metric_ax) = plt.subplots(1, 2, figsize=(11, 4.4), facecolor="#fcfcfb")
     for ax in (loss_ax, metric_ax):
         ax.set_facecolor("#fcfcfb")
-    for n, (seed, history, _) in enumerate(runs):
-        first = n == 0
-        tx, ty = line(loss_ax, history, "loss", TRAIN, "train" if first else None)
-        dx, dy = line(loss_ax, history, "dev_loss", DEV, "dev" if first else None)
-        mtx, mty = line(metric_ax, history, f"train_{metric}", TRAIN, "train sample" if first else None)
-        mdx, mdy = line(metric_ax, history, metric, DEV, "dev" if first else None)
-        best = max(range(len(mdy)), key=lambda i: (mdy[i], -i))
-        for ax in (loss_ax, metric_ax):
-            ax.axvline(mdx[best], color=MUTED, linestyle="--", linewidth=1,
-                       label="best epoch (saved)" if first and ax is metric_ax else None)
-        if first:
-            end_label(loss_ax, tx, ty, "train")
-            end_label(loss_ax, dx, dy, "dev")
-            end_label(metric_ax, mtx, mty, "train")
-            end_label(metric_ax, mdx, mdy, "dev")
+    for seed, history, _ in runs:
+        color = seed_color(seed)
+        line(loss_ax, history, "loss", color, dashed=True)
+        dx, dy = line(loss_ax, history, "dev_loss", color, dashed=False)
+        line(metric_ax, history, f"train_{metric}", color, dashed=True)
+        mx, my = line(metric_ax, history, metric, color, dashed=False)
+        best = mx[max(range(len(my)), key=lambda i: (my[i], -i))]
+        mark_best(loss_ax, dx, dy, best, color)
+        mark_best(metric_ax, mx, my, best, color)
+        if len(runs) <= 4:  # name each seed at the end of its dev line
+            metric_ax.annotate(seed, (mx[-1], my[-1]), xytext=(6, 0), textcoords="offset points",
+                               va="center", fontsize=9, color=INK)
 
     style(loss_ax, "Loss", "loss")
     style(metric_ax, f"{metric} (the score early stopping watches)", metric)
-    for ax in (loss_ax, metric_ax):
-        if ax.get_legend_handles_labels()[0]:
-            ax.legend(frameon=False, fontsize=9, labelcolor=INK)
-    seeds = ", ".join(seed for seed, *_ in runs)
-    fig.suptitle(f"{title}  ({seeds})", x=0.01, ha="left", fontsize=12, color=INK)
-    fig.tight_layout()
+    handles = [Line2D([], [], color=seed_color(seed), linewidth=2.5, label=seed) for seed, *_ in runs]
+    handles += [Line2D([], [], color=MUTED, linewidth=2, label="dev"),
+                Line2D([], [], color=MUTED, linewidth=2, linestyle="--", label="train"),
+                Line2D([], [], color=MUTED, marker="*", markersize=12, linestyle="none", label="best epoch (saved)")]
+    fig.legend(handles=handles, loc="upper right", ncol=len(handles), frameon=False, fontsize=9,
+               labelcolor=INK, bbox_to_anchor=(1, 1.0))
+    fig.suptitle(title, x=0.01, y=0.98, ha="left", fontsize=12, color=INK)
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
     fig.savefig(path, dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
     plt.close(fig)
 
