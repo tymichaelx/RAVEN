@@ -6,6 +6,7 @@
 5. Co-occurrence (Figure 4)
 6. Distinctive vocabulary (Table 2)
 7. Token lengths (Figures 5 and 6)
+
 ### Most sentences describe no technique
 
 The distribution shows that 79% of the sentences in the dataset are unlabeled. This is consistent across splits where the in-scope labeled sentences are about 20.8, 22.4, and 20.0% for train, dev, and test, respectively. 
