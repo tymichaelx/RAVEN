@@ -115,3 +115,26 @@ def test_crossfit_folds_split_whole_documents():
     sizes = np.bincount(list(folds.values()), minlength=5)
     assert sizes.max() - sizes.min() <= 1  # round-robin keeps document counts even
     assert folds == doc_folds(rows, 5, seed=0)  # same seed, same folds
+
+
+def _history(dev_metric, train_loss, dev_loss):
+    return [{"epoch": i + 1, "micro_f1": m, "loss": tl, "dev_loss": dl, "train_micro_f1": m + 0.05}
+            for i, (m, tl, dl) in enumerate(zip(dev_metric, train_loss, dev_loss))]
+
+
+def test_curves_verdicts():
+    from evaluation.curves import diagnose
+    falling = [0.5, 0.4, 0.3, 0.2, 0.1]
+    # Dev score still climbing in the last allowed epoch.
+    v = diagnose(_history([0.3, 0.4, 0.5, 0.55, 0.6], falling, [0.5, 0.45, 0.4, 0.38, 0.36]),
+                 {"epochs": 5}, "micro_f1")
+    assert v["verdict"].startswith("undertrained")
+    # Dev loss bottoms at epoch 2 and climbs while train loss keeps falling.
+    v = diagnose(_history([0.5, 0.6, 0.6, 0.59, 0.58], falling, [0.4, 0.3, 0.35, 0.4, 0.45]),
+                 {"epochs": 10}, "micro_f1")
+    assert v["verdict"].startswith("overfits after about epoch 2") and v["best_epoch"] == 2
+    assert abs(v["gap_at_best"] - 0.05) < 1e-9
+    # Score flat, dev loss flat: a plateau, not overfitting.
+    v = diagnose(_history([0.5, 0.6, 0.6, 0.6, 0.6], falling, [0.4, 0.3, 0.3, 0.3, 0.3]),
+                 {"epochs": 10}, "micro_f1")
+    assert v["verdict"].startswith("plateau")
