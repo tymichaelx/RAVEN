@@ -1,7 +1,7 @@
 # `uv run` installs anything missing from uv.lock before running.
 PYTHON ?= uv run python
 
-.PHONY: setup techniques fetch dataset eda holdout test evaluate random-baseline train-retriever predict-retriever retriever crossfit mine train-verifier predict-verifier verifier curves smoke
+.PHONY: setup techniques fetch dataset eda holdout test evaluate random-baseline train-retriever predict-retriever retriever crossfit mine train-verifier predict-verifier verifier curves llm-baseline smoke
 
 setup:
 	uv sync
@@ -82,6 +82,18 @@ verifier: mine train-verifier predict-verifier
 # Writes runs/<RUN>/<model>/curves.png and curves.json.
 curves:
 	$(PYTHON) -m evaluation.curves --run $(RUN)
+
+# Reference baseline: a local LLM through Ollama, zero-shot (needs `ollama serve` and the model pulled).
+# ~5 hours for dev + test; rerun to resume. One set of predictions serves both run types:
+# metrics_test_withheld.json has the seen/withheld groups for hypothesis 3.
+LLM_MODEL ?= llama3.1:8b
+LLM_DIR = runs/llm/$(subst /,-,$(subst :,-,$(LLM_MODEL)))
+llm-baseline:
+	$(PYTHON) -m src.llm_baseline predict --model $(LLM_MODEL) $(ARGS)
+	$(PYTHON) -m evaluation.evaluate --pred $(LLM_DIR)/dev.jsonl --split dev --out $(LLM_DIR)/metrics_dev.json > /dev/null
+	$(PYTHON) -m evaluation.evaluate --pred $(LLM_DIR)/test_untuned.jsonl --split test --out $(LLM_DIR)/metrics_test_untuned.json > /dev/null
+	$(PYTHON) -m evaluation.evaluate --pred $(LLM_DIR)/test.jsonl --split test --withheld-run --out $(LLM_DIR)/metrics_test_withheld.json > /dev/null
+	$(PYTHON) -m evaluation.evaluate --pred $(LLM_DIR)/test.jsonl --split test --out $(LLM_DIR)/metrics_test.json
 
 # Quick check that the whole chain runs (a few hundred sentences, 1 epoch, a few minutes).
 # Writes to runs/smoke/; the scores mean nothing.
